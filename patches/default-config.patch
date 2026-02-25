@@ -1,0 +1,44 @@
+diff --git a/kernel/conf/account.go b/kernel/conf/account.go
+index 5e3b51f..d4f4e00 100644
+--- a/kernel/conf/account.go
++++ b/kernel/conf/account.go
+@@ -23,7 +23,7 @@ type Account struct {
+ 
+ func NewAccount() *Account {
+ 	return &Account{
+-		DisplayTitle: true,
+-		DisplayVIP:   true,
++		DisplayTitle: false,
++		DisplayVIP:   false,
+ 	}
+ }
+diff --git a/kernel/conf/appearance.go b/kernel/conf/appearance.go
+index ebd1002..1df2f47 100644
+--- a/kernel/conf/appearance.go
++++ b/kernel/conf/appearance.go
+@@ -44,8 +44,8 @@ func NewAppearance() *Appearance {
+ 		Icon:                "material",
+ 		CodeBlockThemeLight: "github",
+ 		CodeBlockThemeDark:  "base16/dracula",
+-		Lang:                "en_US",
+-		CloseButtonBehavior: 0,
++		Lang:                "zh_CN",
++		CloseButtonBehavior: 1,
+ 		HideStatusBar:       false,
+ 	}
+ }
+diff --git a/kernel/conf/sync.go b/kernel/conf/sync.go
+index 488cb9e..4e2a457 100644
+--- a/kernel/conf/sync.go
++++ b/kernel/conf/sync.go
+@@ -36,8 +36,8 @@ func NewSync() *Sync {
+ 		Enabled:             false,
+ 		Perception:          false,
+ 		Mode:                1,
+-		GenerateConflictDoc: false,
+-		Provider:            ProviderSiYuan,
++		GenerateConflictDoc: true,
++		Provider:            ProviderS3,
+ 		Interval:            30,
+ 	}
+ }

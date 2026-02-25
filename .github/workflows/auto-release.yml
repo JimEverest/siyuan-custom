@@ -1,0 +1,72 @@
+name: Auto Release
+
+on:
+  schedule:
+    - cron: "0 12 * * 2,5"  # 每周二和周五 UTC 12:00
+  workflow_dispatch:         # 也支持手动触发检测
+
+jobs:
+  check-and-release:
+    name: Check upstream version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check for new upstream version
+        id: version
+        run: |
+          # 获取本仓库最新 release 版本
+          releasedVersion=$(curl -sf "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            | jq -r '.tag_name // "none"')
+
+          # 获取上游 siyuan 最新版本
+          packageJson=$(curl -sf "https://raw.githubusercontent.com/siyuan-note/siyuan/master/app/package.json")
+          packageVersion=$(echo "$packageJson" | jq -r '.version')
+
+          echo "Current release: ${releasedVersion}"
+          echo "Upstream version: v${packageVersion}"
+
+          if [ "${releasedVersion}" = "v${packageVersion}" ]; then
+            echo "No new version detected."
+            echo "new_version=" >> $GITHUB_OUTPUT
+          else
+            echo "New version detected: v${packageVersion}"
+            echo "new_version=v${packageVersion}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release tag
+        if: steps.version.outputs.new_version != ''
+        uses: ncipollo/release-action@v1
+        with:
+          name: ${{ steps.version.outputs.new_version }}
+          tag: ${{ steps.version.outputs.new_version }}
+          body: |
+            Auto-release for SiYuan ${{ steps.version.outputs.new_version }}
+
+            Patches applied:
+            - disable-update
+            - default-config
+            - mock-vip-user
+            - rename-endpoints
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Docker build
+        if: steps.version.outputs.new_version != ''
+        run: |
+          # 获取 release-docker.yml 的 workflow ID
+          response=$(curl -sf \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows")
+
+          dockerId=$(echo "$response" | jq -r '.workflows[] | select(.path | contains("release-docker.yml")) | .id')
+
+          echo "Dispatching release-docker.yml (workflow ID: $dockerId) with version ${{ steps.version.outputs.new_version }}"
+
+          curl -sf -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${dockerId}/dispatches" \
+            -d '{"ref": "master", "inputs": {"version": "${{ steps.version.outputs.new_version }}"}}'

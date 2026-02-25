@@ -1,0 +1,81 @@
+name: Release Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SiYuan version tag (e.g. v3.1.18)"
+        required: true
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout this repo (patches)
+        uses: actions/checkout@v4
+        with:
+          path: custom
+
+      - name: Clone upstream SiYuan and apply patches
+        run: |
+          cd ${{ github.workspace }}/custom
+
+          echo "Cloning siyuan-note/siyuan@${{ github.event.inputs.version }}..."
+          git clone --branch ${{ github.event.inputs.version }} --depth=1 https://github.com/siyuan-note/siyuan.git
+          cd siyuan
+
+          echo "Applying patches..."
+          for patch in disable-update default-config mock-vip-user rename-endpoints; do
+            patch_file="${{ github.workspace }}/custom/patches/${patch}.patch"
+            if [ -f "$patch_file" ]; then
+              echo "  - ${patch}.patch"
+              git apply "$patch_file" || {
+                echo "ERROR: ${patch}.patch failed to apply against ${{ github.event.inputs.version }}"
+                echo "The patch may need to be regenerated for this version."
+                exit 1
+              }
+            fi
+          done
+
+          echo ""
+          echo "Applied changes:"
+          git diff --stat
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PWD }}
+
+      - name: Build and push Docker image
+        working-directory: ${{ github.workspace }}/custom/siyuan
+        run: |
+          docker buildx build \
+            --push \
+            --platform linux/amd64,linux/arm64 \
+            -t ${{ secrets.DOCKER_HUB_USER }}/siyuan-custom:latest \
+            -t ${{ secrets.DOCKER_HUB_USER }}/siyuan-custom:${{ github.event.inputs.version }} \
+            .

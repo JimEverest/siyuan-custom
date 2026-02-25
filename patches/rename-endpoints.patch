@@ -1,0 +1,61 @@
+diff --git a/app/src/constants.ts b/app/src/constants.ts
+index 2741537..c8586b5 100644
+--- a/app/src/constants.ts
++++ b/app/src/constants.ts
+@@ -24,7 +24,7 @@ export abstract class Constants {
+     // 服务器地址
+     public static readonly ASSETS_ADDRESS: string = "https://assets.b3logfile.com/siyuan/";
+     public static readonly PROTYLE_CDN: string = "/stage/protyle";
+-    public static readonly UPLOAD_ADDRESS: string = "/upload";
++    public static readonly UPLOAD_ADDRESS: string = "/u_OCR";
+     public static readonly SERVICE_WORKER_PATH: string = "/service-worker.js";
+ 
+     // drop 事件
+diff --git a/app/src/plugin/index.ts b/app/src/plugin/index.ts
+index fbe0440..5a66cd3 100644
+--- a/app/src/plugin/index.ts
++++ b/app/src/plugin/index.ts
+@@ -235,7 +235,7 @@ export class Plugin {
+             formData.append("path", pathString);
+             formData.append("file", file);
+             formData.append("isDir", "false");
+-            fetchPost("/api/file/putFile", formData, (response) => {
++            fetchPost("/api/file/p_ocr", formData, (response) => {
+                 this.data[storageName] = data;
+                 resolve(response);
+             });
+diff --git a/kernel/api/router.go b/kernel/api/router.go
+index 60e9431..44d5edd 100644
+--- a/kernel/api/router.go
++++ b/kernel/api/router.go
+@@ -214,7 +214,7 @@ func ServeAPI(ginServer *gin.Engine) {
+ 	ginServer.Handle("POST", "/api/block/getBlockTreeInfos", model.CheckAuth, getBlockTreeInfos)
+ 
+ 	ginServer.Handle("POST", "/api/file/getFile", model.CheckAuth, getFile)
+-	ginServer.Handle("POST", "/api/file/putFile", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, putFile)
++	ginServer.Handle("POST", "/api/file/p_ocr", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, putFile)
+ 	ginServer.Handle("POST", "/api/file/copyFile", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, copyFile)
+ 	ginServer.Handle("POST", "/api/file/globalCopyFiles", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, globalCopyFiles)
+ 	ginServer.Handle("POST", "/api/file/removeFile", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, removeFile)
+@@ -269,7 +269,7 @@ func ServeAPI(ginServer *gin.Engine) {
+ 	ginServer.Handle("POST", "/api/asset/uploadCloud", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, uploadCloud)
+ 	ginServer.Handle("POST", "/api/asset/insertLocalAssets", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, insertLocalAssets)
+ 	ginServer.Handle("POST", "/api/asset/resolveAssetPath", model.CheckAuth, resolveAssetPath)
+-	ginServer.Handle("POST", "/api/asset/upload", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
++	ginServer.Handle("POST", "/api/asset/ass_ocr", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
+ 	ginServer.Handle("POST", "/api/asset/setFileAnnotation", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, setFileAnnotation)
+ 	ginServer.Handle("POST", "/api/asset/getFileAnnotation", model.CheckAuth, getFileAnnotation)
+ 	ginServer.Handle("POST", "/api/asset/getUnusedAssets", model.CheckAuth, getUnusedAssets)
+diff --git a/kernel/server/serve.go b/kernel/server/serve.go
+index fae52d3..4f24008 100644
+--- a/kernel/server/serve.go
++++ b/kernel/server/serve.go
+@@ -470,7 +470,7 @@ func serveAuthPage(c *gin.Context) {
+ }
+ 
+ func serveAssets(ginServer *gin.Engine) {
+-	ginServer.POST("/upload", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
++	ginServer.POST("/u_OCR", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
+ 
+ 	ginServer.GET("/assets/*path", model.CheckAuth, func(context *gin.Context) {
+ 		requestPath := context.Param("path")
