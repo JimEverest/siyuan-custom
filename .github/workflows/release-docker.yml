@@ -1,4 +1,5 @@
 name: Release Docker Image
+# Build and push custom SiYuan Docker image with patches applied
 
 on:
   workflow_dispatch:

@@ -1,4 +1,5 @@
 name: Auto Release
+# Check upstream SiYuan for new versions and trigger Docker build
 
 on:
   schedule:
