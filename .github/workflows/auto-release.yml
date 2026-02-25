@@ -3,7 +3,7 @@ name: Auto Release
 
 on:
   schedule:
-    - cron: "0 12 * * 2,5"  # 每周二和周五 UTC 12:00
+    - cron: "0 12 * * *"  # 每天 UTC 12:00（北京时间 20:00）
   workflow_dispatch:         # 也支持手动触发检测
 
 jobs:
