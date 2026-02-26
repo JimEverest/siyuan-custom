@@ -11,9 +11,11 @@
 │  Azure VM (20.192.24.1)                  │
 │                                          │
 │  ┌─────────────────────────────────────┐ │
-│  │ Nginx (port 6807)                   │ │
-│  │ - SSL termination (Let's Encrypt)   │ │
-│  │ - 反向代理 + WebSocket              │ │
+│  │ Caddy (port 443 + 6807)            │ │
+│  │ - 自动 HTTPS (Let's Encrypt)       │ │
+│  │ - 反向代理 + WebSocket             │ │
+│  │ - 443  → 127.0.0.1:3001 (其他app) │ │
+│  │ - 6807 → 127.0.0.1:6806 (思源)    │ │
 │  └──────────────┬──────────────────────┘ │
 │                 │                        │
 │                 ▼                        │
@@ -27,7 +29,9 @@
 
 **访问地址：** `https://obslinux.centralindia.cloudapp.azure.com:6807`
 
-> **关于 IP 直接访问：** Let's Encrypt 不支持给 IP 地址签发 SSL 证书。通过 IP 访问（`http://20.192.24.1:6807`）只能走 HTTP，浏览器会提示不安全。建议统一使用域名访问。
+> **关于 SSL：** VM 上已有 Caddy 作为反向代理运行。Caddy 自动处理 Let's Encrypt 证书的获取和续期，无需手动配置 certbot。
+>
+> **关于 IP 直接访问：** Let's Encrypt 不支持给 IP 地址签发证书。通过 IP 访问（`http://20.192.24.1:6807`）只能走 HTTP。建议统一使用域名访问。
 
 ---
 
@@ -53,8 +57,6 @@
 
 5. 点击 **Add**
 
-> 如果后续需要 certbot HTTP-01 验证（首次获取证书），还需要临时开放 **80** 端口。如果 80 端口已开放可跳过。
-
 ---
 
 ## 第二步：SSH 登录 VM
@@ -67,36 +69,7 @@ ssh your-username@obslinux.centralindia.cloudapp.azure.com
 
 ---
 
-## 第三步：检查环境
-
-```bash
-# 检查 Docker
-docker --version
-
-# 检查 Nginx 是否已安装
-nginx -v 2>&1 || echo "Nginx 未安装"
-
-# 检查 Nginx 是否在运行
-systemctl status nginx 2>/dev/null || echo "Nginx 未运行"
-
-# 检查 6806 和 6807 端口是否被占用
-ss -tlnp | grep -E '6806|6807'
-```
-
----
-
-## 第四步：安装 Nginx（如果未安装）
-
-```bash
-sudo apt update
-sudo apt install -y nginx
-sudo systemctl enable nginx
-sudo systemctl start nginx
-```
-
----
-
-## 第五步：启动 siyuan-custom 容器
+## 第三步：启动 siyuan-custom 容器
 
 ```bash
 # 创建数据目录
@@ -124,144 +97,69 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:6806
 
 ---
 
-## 第六步：配置 Nginx 反向代理
+## 第四步：配置 Caddy 反向代理
 
-创建 Nginx 配置文件：
+VM 上已有 Caddy 在运行（监听 443 端口为其他应用提供服务）。只需在 Caddyfile 中追加 siyuan 配置。
+
+编辑 Caddyfile：
 
 ```bash
-sudo tee /etc/nginx/sites-available/siyuan <<'EOF'
-# 思源笔记 - 反向代理配置
-# 监听 6807 端口，代理到本地 siyuan 容器
+sudo nano /etc/caddy/Caddyfile
+```
 
-server {
-    listen 6807 ssl http2;
-    listen [::]:6807 ssl http2;
-    server_name obslinux.centralindia.cloudapp.azure.com;
+在文件末尾追加以下内容：
 
-    # SSL 证书路径（certbot 会自动填充，先用占位）
-    ssl_certificate     /etc/letsencrypt/live/obslinux.centralindia.cloudapp.azure.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/obslinux.centralindia.cloudapp.azure.com/privkey.pem;
+```
+obslinux.centralindia.cloudapp.azure.com:6807 {
+    reverse_proxy 127.0.0.1:6806
+}
+```
 
-    # SSL 安全配置
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
+完整的 Caddyfile 应该是：
 
-    # 反向代理到 siyuan 容器
-    location / {
-        proxy_pass http://127.0.0.1:6806;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket 支持（思源笔记需要）
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # 超时设置
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 300s;
-
-        # 上传文件大小限制（思源可能上传较大附件）
-        client_max_body_size 128m;
+```
+obslinux.centralindia.cloudapp.azure.com {
+    reverse_proxy 127.0.0.1:3001 {
+        transport http {
+            tls_insecure_skip_verify
+        }
     }
 }
-EOF
+
+obslinux.centralindia.cloudapp.azure.com:6807 {
+    reverse_proxy 127.0.0.1:6806
+}
 ```
 
-先不启用这个配置（等获取 SSL 证书后再启用）。
+保存后重载 Caddy：
+
+```bash
+sudo systemctl reload caddy
+```
+
+> **SSL 证书：** Caddy 会自动为 6807 端口获取 Let's Encrypt 证书并自动续期，无需任何手动操作。
 
 ---
 
-## 第七步：获取 SSL 证书
+## 第五步：验证
 
-### 安装 Certbot
-
-```bash
-sudo apt install -y certbot
-```
-
-### 获取证书
-
-使用 standalone 模式获取证书（临时占用 80 端口）：
+### 检查 Caddy 状态
 
 ```bash
-# 如果 nginx 正在占用 80 端口，先临时停止
-sudo systemctl stop nginx
+# Caddy 是否正常运行
+sudo systemctl status caddy
 
-# 获取证书
-sudo certbot certonly \
-  --standalone \
-  -d obslinux.centralindia.cloudapp.azure.com \
-  --non-interactive \
-  --agree-tos \
-  --email your-email@example.com
+# 6807 端口是否在监听
+sudo ss -tlnp | grep 6807
 
-# 重新启动 nginx
-sudo systemctl start nginx
+# 查看 Caddy 日志（如果有问题）
+sudo journalctl -u caddy --no-pager -n 50
 ```
-
-> **替换 `your-email@example.com`** 为你的实际邮箱，Let's Encrypt 会在证书即将过期时发邮件提醒。
-
-验证证书已生成：
-
-```bash
-sudo ls /etc/letsencrypt/live/obslinux.centralindia.cloudapp.azure.com/
-# 应该看到 fullchain.pem  privkey.pem  chain.pem  cert.pem
-```
-
----
-
-## 第八步：启用 Nginx 配置
-
-```bash
-# 启用站点配置
-sudo ln -sf /etc/nginx/sites-available/siyuan /etc/nginx/sites-enabled/siyuan
-
-# 测试配置语法
-sudo nginx -t
-
-# 重新加载 nginx
-sudo systemctl reload nginx
-```
-
-如果 `nginx -t` 报错，检查证书路径是否正确。
-
----
-
-## 第九步：配置证书自动续期
-
-Let's Encrypt 证书有效期 90 天。Certbot 安装时通常会自动创建定时任务，但需要确认：
-
-```bash
-# 检查自动续期定时任务是否存在
-systemctl list-timers | grep certbot
-
-# 如果没有，手动添加 cron
-sudo crontab -e
-# 添加以下行（每天凌晨 3 点检查续期）：
-# 0 3 * * * certbot renew --quiet --deploy-hook "systemctl reload nginx"
-```
-
-测试续期流程（不会真正续期，只是模拟）：
-
-```bash
-sudo certbot renew --dry-run
-```
-
----
-
-## 第十步：验证
 
 ### 命令行验证
 
 ```bash
-# 在 VM 上测试
+# 测试 HTTPS 访问
 curl -I https://obslinux.centralindia.cloudapp.azure.com:6807
 
 # 检查 SSL 证书信息
@@ -305,14 +203,11 @@ docker run -d \
 ### 查看日志
 
 ```bash
-# 思源日志
+# 思源容器日志
 docker logs -f siyuan --tail 100
 
-# Nginx 访问日志
-sudo tail -f /var/log/nginx/access.log
-
-# Nginx 错误日志
-sudo tail -f /var/log/nginx/error.log
+# Caddy 日志
+sudo journalctl -u caddy -f --no-pager -n 100
 ```
 
 ### 备份数据
@@ -328,8 +223,9 @@ sudo tar -czf siyuan-backup-$(date +%Y%m%d).tar.gz /opt/siyuan/workspace/
 
 | 问题 | 检查命令 | 可能原因 |
 |---|---|---|
-| 无法访问 6807 端口 | `ss -tlnp \| grep 6807` | Azure NSG 未开放 / Nginx 未启动 |
-| SSL 证书错误 | `sudo certbot certificates` | 证书过期 / 路径错误 |
+| 无法访问 6807 端口 | `sudo ss -tlnp \| grep 6807` | Azure NSG 未开放 / Caddy 未监听 |
+| SSL 证书错误 | `sudo journalctl -u caddy \| grep tls` | Caddy 无法获取证书（检查域名 DNS 和 80 端口） |
 | 502 Bad Gateway | `docker ps \| grep siyuan` | 容器未运行 / 端口未绑定 |
-| WebSocket 连接失败 | 检查 Nginx 配置中的 Upgrade 头 | 缺少 WebSocket 代理配置 |
-| 上传文件失败 | 检查 Nginx `client_max_body_size` | 文件超过大小限制 |
+| WebSocket 连接失败 | `sudo journalctl -u caddy -f` | Caddy 默认支持 WebSocket，检查容器状态 |
+| 上传文件失败 | `docker logs siyuan --tail 20` | 检查容器日志中的错误信息 |
+| Caddy reload 失败 | `caddy validate --config /etc/caddy/Caddyfile` | Caddyfile 语法错误 |
