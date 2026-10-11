@@ -52,6 +52,9 @@ def main():
         version=json.loads(data)['data']
         assert status==200 and version=='3.8.7-alpha.9','version mismatch'
         checks['version']=True
+        boot=api('/api/system/bootProgress',{})
+        checks['boot_completed']=isinstance(boot,dict) and boot.get('progress')==100
+        assert checks['boot_completed'],'kernel database and notebook initialization is incomplete'
         status,_=call('/api/notebook/lsNotebooks',{},auth=False)
         assert status in (401,403),'anonymous access not denied'
         checks['auth_required']=True

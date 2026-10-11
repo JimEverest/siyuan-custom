@@ -12,6 +12,32 @@ import uuid
 STAGE = Path('/home/nl/siyuan-upgrade-20261012-alpha9')
 
 
+def wait_for_workspace(token, timeout=900):
+    headers = {'Authorization': 'Token ' + token, 'Content-Type': 'application/json'}
+    requests = [urllib.request.Request('http://127.0.0.1:16806' + path, data=b'{}', headers=headers)
+                for path in ('/api/system/bootProgress', '/api/notebook/lsNotebooks')]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            results = []
+            for request in requests:
+                with opener.open(request, timeout=20) as response:
+                    if response.status != 200:
+                        raise RuntimeError('Workspace readiness HTTP response failed')
+                    results.append(json.load(response))
+            boot, notebooks = results
+            loaded = notebooks.get('data', {}).get('notebooks')
+            if (boot.get('code') == 0 and boot.get('data', {}).get('progress') == 100
+                    and notebooks.get('code') == 0 and isinstance(loaded, list) and len(loaded) >= 33):
+                return
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            raise RuntimeError('workspace readiness timed out')
+        time.sleep(2)
+
+
 def run_preparation(image, stage=STAGE):
     os.umask(0o077)
     # Hold this independent lock across prepare AND all subsequent tests. The
@@ -44,22 +70,7 @@ def run_preparation(image, stage=STAGE):
             run('deploy.py', 'prepare', '--image', image, '--operation-id', operation_id)
             save('waiting-for-workspace')
             config = json.loads(Path('/opt/siyuan/workspace-alpha9-candidate/conf/conf.json').read_text())
-            request = urllib.request.Request(
-                'http://127.0.0.1:16806/api/notebook/lsNotebooks', data=b'{}',
-                headers={'Authorization': 'Token ' + config['api']['token'], 'Content-Type': 'application/json'})
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            deadline = time.monotonic() + 240
-            while True:
-                try:
-                    with opener.open(request, timeout=20) as response:
-                        result = json.load(response)
-                    if result.get('code') == 0 and len(result.get('data', {}).get('notebooks', [])) >= 33:
-                        break
-                except Exception:
-                    pass
-                if time.monotonic() > deadline:
-                    raise RuntimeError('workspace readiness timed out')
-                time.sleep(2)
+            wait_for_workspace(config['api']['token'])
             run('smoke.py', timeout=300)
             run('wrapper-smoke.py', timeout=240)
             run('verify-data.py', timeout=1800)

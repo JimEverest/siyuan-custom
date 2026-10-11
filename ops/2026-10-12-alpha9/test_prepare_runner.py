@@ -1,5 +1,6 @@
 """Preparation ownership and concurrency regression tests; no VM access."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import tempfile
 import threading
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 try:
     import fcntl
@@ -21,6 +22,50 @@ except ImportError:
 spec = importlib.util.spec_from_file_location('prepare_runner', Path(__file__).with_name('prepare-and-test.py'))
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
+
+
+class WorkspaceReadinessTests(unittest.TestCase):
+    @staticmethod
+    def response(data, status=200):
+        result = io.BytesIO(json.dumps(data).encode())
+        result.status = status
+        return result
+
+    def test_waits_for_both_boot_completion_and_loaded_notebooks(self):
+        opener = Mock()
+        opener.open.side_effect = [
+            self.response({'code': 0, 'data': {'progress': progress}}) if i % 2 == 0
+            else self.response({'code': 0, 'data': {'notebooks': [{}] * count}})
+            for progress, count in ((99, 33), (100, 32), (100, 33)) for i in range(2)]
+        with patch.object(runner.urllib.request, 'build_opener', return_value=opener), \
+                patch.object(runner.time, 'sleep') as sleep:
+            runner.wait_for_workspace('test-only-token')
+        self.assertEqual(opener.open.call_count, 6)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual([call.args[0].full_url for call in opener.open.call_args_list],
+                         ['http://127.0.0.1:16806/api/system/bootProgress',
+                          'http://127.0.0.1:16806/api/notebook/lsNotebooks'] * 3)
+
+    def test_default_readiness_deadline_is_900_seconds(self):
+        opener = Mock()
+        opener.open.side_effect = lambda request, **kwargs: self.response(
+            {'code': 0, 'data': {'progress': 99, 'notebooks': [{}] * 33}})
+        with patch.object(runner.urllib.request, 'build_opener', return_value=opener), \
+                patch.object(runner.time, 'monotonic', side_effect=[0, 899, 900]), \
+                patch.object(runner.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(RuntimeError, 'readiness timed out'):
+                runner.wait_for_workspace('test-only-token')
+        self.assertEqual(opener.open.call_count, 4)
+        sleep.assert_called_once_with(2)
+
+    def test_failed_boot_response_does_not_accept_complete_progress(self):
+        opener = Mock()
+        opener.open.side_effect = [self.response({'code': -1, 'data': {'progress': 100}}),
+                                   self.response({'code': 0, 'data': {'notebooks': [{}] * 33}})]
+        with patch.object(runner.urllib.request, 'build_opener', return_value=opener), \
+                patch.object(runner.time, 'monotonic', side_effect=[0, 900]):
+            with self.assertRaisesRegex(RuntimeError, 'readiness timed out'):
+                runner.wait_for_workspace('test-only-token')
 
 
 class PrepareRunnerTests(unittest.TestCase):
