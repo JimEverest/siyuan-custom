@@ -3,5 +3,7 @@
   "upstream_repository": "https://github.com/siyuan-note/siyuan.git",
   "upstream_commit": "def127fc774ab2b5ab9a0096609a15aa5ba30df4",
   "patch_directory": "patches/v3.8.7-alpha.9",
-  "prerelease": true
+  "prerelease": true,
+  "required_build_patch": "docker-build.patch",
+  "build_patch_reason": "Include kernel/av/lunar_calendar_data.json in the Docker node-build stage for the frontend lunar calendar import."
 }

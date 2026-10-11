@@ -1,0 +1,10 @@
+diff --git a/Dockerfile b/Dockerfile
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -15,5 +15,6 @@ EORUN
+ 
+ ADD app/ .
++COPY kernel/av/lunar_calendar_data.json /kernel/av/lunar_calendar_data.json
+ ADD scripts/prepare-ocr.py scripts/ocr-assets.json /scripts/
+ RUN <<EORUN
+ #!/bin/bash -e

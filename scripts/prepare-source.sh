@@ -15,6 +15,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 UPSTREAM_URL="https://github.com/siyuan-note/siyuan.git"
 PATCH_NAMES=(disable-update default-config mock-vip-user rename-endpoints)
+if [[ "$VERSION" == v3.8.7-alpha.9 ]]; then
+    # The upstream Dockerfile omits the shared lunar-calendar JSON from node-build.
+    PATCH_NAMES+=(docker-build)
+fi
 PATCH_RELATIVE="patches/${VERSION}"
 if [[ ! -d "${REPOSITORY_DIR}/${PATCH_RELATIVE}" ]]; then
     [[ "$VERSION" == v3.5.8 ]] || fail "version-specific patches are required for ${VERSION}"

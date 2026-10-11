@@ -46,6 +46,8 @@
 - On failure stop candidate, preserve post-upgrade data, restore pre-upgrade workspace with old container; no blind in-place downgrade.
 - Record actual downtime, evidence, immutable artifacts and rollback paths. Do not claim deployment until verified.
 
-## Current access constraint
+## Access and live preflight
 
-The host at 20.192.24.1 responds with the known SSH host key, but this session has no usable SSH identity. Repository configuration intentionally does not retain VM passwords. User has been asked for an existing private credential path or loaded SSH agent key. No production changes have been made.
+SSH access was established using credentials supplied for this session, with the existing host key verified. Credentials are not stored in this repository. Live preflight confirmed version 3.5.8, 33 notebooks, 1,858 note files, a 7.48 GB complete workspace and about 13.85 GB free before pulling the candidate image. Seven other application containers are running and must remain unchanged.
+
+The capacity-safe deployment uses one full independent workspace copy. After successful testing, two same-filesystem directory renames preserve the old original under a private 0700 stage and put the migrated copy at the existing production path. The production candidate keeps sync disabled through HTTPS and browser validation; a final explicit API call restores the original sync setting. Once remote sync can write, automatic rollback to an older local workspace is blocked because it cannot undo remote storage changes.
