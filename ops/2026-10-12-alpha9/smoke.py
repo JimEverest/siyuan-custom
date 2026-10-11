@@ -76,7 +76,7 @@ def main():
         status,download=call('/api/file/getFile',{'path':file_path})
         assert status==200 and download==content,'put/get mismatch'
         checks['file_put_read_hash']=True
-        png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1kAAAAASUVORK5CYII=')
+        png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=')
         # Unique bytes prevent deduplication from returning a user's pre-existing asset.
         text_chunk=b'tEXt'+b'SiYuanUpgrade\0'+unique.encode()
         png=png[:-12]+struct.pack('>I',len(text_chunk)-4)+text_chunk+struct.pack('>I',zlib.crc32(text_chunk))+png[-12:]

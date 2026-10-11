@@ -9,7 +9,7 @@ old=json.loads((stage/'production-conf-before.json').read_text())
 assert conf['sync']['enabled']==old['sync']['enabled']
 assert conf['sync']['provider']==old['sync']['provider']
 assert conf['api']['token']==old['api']['token']
-assert conf['lang']==old['lang']
+assert conf['lang']=={'en_US':'en'}.get(old['lang'],old['lang'])
 def api(path,payload=None):
  req=urllib.request.Request('http://127.0.0.1:6806'+path,data=json.dumps(payload).encode() if payload is not None else None,headers={'Authorization':'Token '+conf['api']['token'],'Content-Type':'application/json'})
  with urllib.request.urlopen(req,timeout=60) as r:

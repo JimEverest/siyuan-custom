@@ -22,6 +22,7 @@ for name,entry in baseline.items():
 old=json.loads((stage/'production-conf-before.json').read_text())
 new=json.loads((workspace/'conf/conf.json').read_text())
 assert new['api']['token']==old['api']['token'],'API token changed'
+assert new['lang']=={'en_US':'en'}.get(old['lang'],old['lang']),'Configured language changed unexpectedly'
 assert new['sync']['enabled'] is False
 settings=[]
 for key,value in old['sync'].items():
