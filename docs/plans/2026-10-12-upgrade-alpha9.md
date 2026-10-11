@@ -27,7 +27,7 @@
 - Verify VM identity, target container, image, configuration, mounts, ports, capacity, and all unrelated services.
 - Inspect writable-layer differences and preserve any extra custom files, themes and icons.
 - Prepare a protected backup directory; never print access codes, tokens, notes or raw container inspect.
-- Confirm sufficient capacity for the old container snapshot, full workspace backup and test copy.
+- Confirm sufficient capacity for the old container snapshot, one full independent workspace copy and at least 3 GiB remaining free space.
 
 ## 4. Isolated validation
 
@@ -40,7 +40,7 @@
 ## 5. Backup, switch, verify, rollback
 
 - Stop writers for a consistent full backup including conf, data, repo, history, temp/databases and WAL files.
-- Preserve the old stopped container and snapshot writable layer privately; verify backup archive and restore into isolated directory.
+- Preserve the old stopped container and snapshot writable layer privately; compare a SHA256/metadata manifest of the complete original workspace with the independent candidate copy. After validation, retain the original workspace as the backup using same-filesystem directory renames.
 - Start candidate with actual production configuration and new serve subcommand; never open one workspace with two kernels.
 - Validate authenticated version, notes/attachments inventory, upload compatibility and public HTTPS; verify unrelated services.
 - On failure stop candidate, preserve post-upgrade data, restore pre-upgrade workspace with old container; no blind in-place downgrade.

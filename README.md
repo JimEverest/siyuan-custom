@@ -120,7 +120,8 @@ bash build-docker.sh v3.8.7-alpha.9 ttqwer1
 `Release Docker Image` 工作流默认构建 linux/amd64，运行 API 契约检查和定向 Go 测试，
 再生成含 run ID 的候选镜像。准备期间不覆盖 `latest`；生产应使用验证过的 digest。
 构建 artifact 保存源提交、补丁 SHA256、完整修改摘要和镜像构建元数据。
-此 alpha 版本额外包含 `docker-build.patch`，补齐官方 Docker 前端构建阶段缺少的农历数据文件。
+此 alpha 版本额外包含 `docker-build.patch`，补齐官方 Docker 前端构建阶段缺少的农历数据文件，
+并安装 ONNX Runtime 的 Eigen 依赖构建需要的 `patch` 工具。
 
 v3.8.7-alpha.9 是预发布版，启动命令须包含 `serve`。
 升级前必须保留旧容器的可写层和停止写入后的完整工作区，包括 `conf`、`data`、`repo`、

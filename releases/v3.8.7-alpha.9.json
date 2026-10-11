@@ -5,5 +5,5 @@
   "patch_directory": "patches/v3.8.7-alpha.9",
   "prerelease": true,
   "required_build_patch": "docker-build.patch",
-  "build_patch_reason": "Include kernel/av/lunar_calendar_data.json in the Docker node-build stage for the frontend lunar calendar import."
+  "build_patch_reason": "Include the shared lunar-calendar JSON in node-build, and install patch for the ONNX Runtime Eigen dependency build."
 }
