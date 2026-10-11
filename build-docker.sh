@@ -1,75 +1,45 @@
-#!/bin/bash
-# 本地构建自定义思源笔记 Docker 镜像
-# 使用方法：./build-docker.sh <version> <docker-username>
-
-set -e
+#!/usr/bin/env bash
+# Build a local candidate; this script never publishes or updates :latest.
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PATCHES_DIR="${SCRIPT_DIR}/patches"
-
-SIYUAN_VERSION="${1:-v3.1.18}"
-DOCKER_USERNAME="${2:-ttqwer1}"
-IMAGE_NAME="siyuan-custom"
-
-echo "================================================="
-echo "构建 ${DOCKER_USERNAME}/${IMAGE_NAME}:${SIYUAN_VERSION}"
-echo "================================================="
-
-if [ ! -d "$PATCHES_DIR" ]; then
-    echo "错误：找不到 patches 目录 $PATCHES_DIR"
-    exit 1
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "Usage: $0 <version> [docker-username]" >&2
+    exit 2
 fi
+SIYUAN_VERSION="$1"
+DOCKER_USERNAME="${2:-ttqwer1}"
+if [[ ! "$SIYUAN_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+    echo "ERROR: invalid SiYuan version tag" >&2
+    exit 2
+fi
+if [[ ! "$DOCKER_USERNAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+    echo "ERROR: invalid Docker Hub username" >&2
+    exit 2
+fi
+IMAGE_TAG="${IMAGE_TAG:-${SIYUAN_VERSION}-candidate-$(date -u +%Y%m%dT%H%M%SZ)}"
+if [[ ! "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ || "$IMAGE_TAG" == latest ]]; then
+    echo "ERROR: IMAGE_TAG must be an explicit candidate tag, not latest" >&2
+    exit 2
+fi
+IMAGE_REF="${DOCKER_USERNAME}/siyuan-custom:${IMAGE_TAG}"
+WORKSPACE="$(mktemp -d -t siyuan-custom.XXXXXXXX)"
+SOURCE_DIR="${WORKSPACE}/siyuan"
+echo "Preparing ${SIYUAN_VERSION} in ${SOURCE_DIR}"
+bash "${SCRIPT_DIR}/scripts/prepare-source.sh" "$SIYUAN_VERSION" "$SOURCE_DIR"
 
-WORKSPACE=$(mktemp -d)
-echo "工作目录：$WORKSPACE"
+SOURCE_SHA="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
+MANIFEST_SHA="$(sha256sum "${SOURCE_DIR}/source-manifest.json" | cut -d ' ' -f 1)"
+docker buildx build --load --platform linux/amd64 \
+    --label "org.opencontainers.image.source=https://github.com/JimEverest/siyuan-custom" \
+    --label "org.opencontainers.image.version=${SIYUAN_VERSION}" \
+    --label "io.siyuan.upstream.revision=${SOURCE_SHA}" \
+    --label "io.siyuan.source-manifest.sha256=${MANIFEST_SHA}" \
+    --metadata-file "${WORKSPACE}/build-metadata.json" \
+    -t "$IMAGE_REF" "$SOURCE_DIR"
 
-echo "克隆 siyuan-note/siyuan@${SIYUAN_VERSION}..."
-git clone --branch "$SIYUAN_VERSION" --depth=1 https://github.com/siyuan-note/siyuan.git "${WORKSPACE}/siyuan"
-cd "${WORKSPACE}/siyuan"
-
-echo "应用 patches..."
-for patch in disable-update default-config mock-vip-user rename-endpoints; do
-    patch_file="${PATCHES_DIR}/${patch}.patch"
-    if [ -f "$patch_file" ]; then
-        echo "  - ${patch}.patch"
-        git apply "$patch_file" || {
-            echo "    错误：${patch}.patch 应用失败"
-            echo "    请检查 patch 是否与 ${SIYUAN_VERSION} 兼容"
-            exit 1
-        }
-    fi
-done
-
-echo ""
-git diff --stat
-
-echo "================================================="
-echo "构建 Docker 镜像..."
-echo "================================================="
-
-docker buildx build \
-    --load \
-    --platform linux/amd64 \
-    -t "${DOCKER_USERNAME}/${IMAGE_NAME}:latest" \
-    -t "${DOCKER_USERNAME}/${IMAGE_NAME}:${SIYUAN_VERSION}" \
-    .
-
-echo "================================================="
-echo "完成！"
-echo "================================================="
-echo ""
-echo "测试："
-echo "  docker run -d --name siyuan-test -p 6806:6806 \\"
-echo "    -v /tmp/siyuan-data:/siyuan/workspace \\"
-echo "    ${DOCKER_USERNAME}/${IMAGE_NAME}:latest \\"
-echo "    --workspace=/siyuan/workspace/ --accessAuthCode=test123"
-echo ""
-echo "验证："
-echo "  curl -sw '%{http_code}' -o /dev/null -X POST http://localhost:6806/upload     # 期望 404"
-echo "  curl -sw '%{http_code}' -o /dev/null -X POST http://localhost:6806/u_OCR      # 期望 401"
-echo ""
-echo "推送："
-echo "  docker push ${DOCKER_USERNAME}/${IMAGE_NAME}:latest"
-echo "  docker push ${DOCKER_USERNAME}/${IMAGE_NAME}:${SIYUAN_VERSION}"
-echo ""
-echo "清理：rm -rf $WORKSPACE"
+printf '%s\n' "$IMAGE_REF" > "${WORKSPACE}/image-reference.txt"
+echo "Built candidate: ${IMAGE_REF}"
+echo "Source/patch record: ${SOURCE_DIR}/source-manifest.json"
+echo "Build metadata: ${WORKSPACE}/build-metadata.json"
+echo "Publish this exact candidate when ready: docker push ${IMAGE_REF}"

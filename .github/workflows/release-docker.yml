@@ -1,23 +1,46 @@
 name: Release Docker Image
-# Build and push custom SiYuan Docker image with patches applied
+# Publish an explicit candidate and preserve its source/patch and image metadata.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "SiYuan version tag (e.g. v3.1.18)"
+        description: "SiYuan version tag (e.g. v3.8.7-alpha.9)"
         required: true
+        type: string
+      platforms:
+        description: "Target platforms"
+        required: true
+        type: choice
+        default: linux/amd64
+        options:
+          - linux/amd64
+          - linux/amd64,linux/arm64
 
 jobs:
   build:
-    name: Build and Push Docker Image
+    name: Build and Push Candidate Image
     runs-on: ubuntu-latest
-
+    timeout-minutes: 360
     permissions:
-      packages: write
       contents: read
+    env:
+      SIYUAN_VERSION: ${{ inputs.version }}
+      TARGET_PLATFORMS: ${{ inputs.platforms || 'linux/amd64' }}
+      DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
 
     steps:
+      - name: Validate build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SIYUAN_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || { echo "Invalid version tag" >&2; exit 1; }
+          [[ "$TARGET_PLATFORMS" == linux/amd64 || "$TARGET_PLATFORMS" == linux/amd64,linux/arm64 ]] || { echo "Invalid platforms" >&2; exit 1; }
+          [[ "$DOCKER_HUB_USER" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { echo "Invalid Docker Hub username" >&2; exit 1; }
+          IMAGE_TAG="${SIYUAN_VERSION}-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [[ ${#IMAGE_TAG} -le 128 ]] || { echo "Image tag is too long" >&2; exit 1; }
+          printf 'IMAGE_REF=%s/siyuan-custom:%s\n' "$DOCKER_HUB_USER" "$IMAGE_TAG" >> "$GITHUB_ENV"
+
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -34,32 +57,31 @@ jobs:
         with:
           path: custom
 
-      - name: Clone upstream SiYuan and apply patches
+      - name: Prepare pinned source and required patches
+        shell: bash
+        working-directory: custom
+        run: bash scripts/prepare-source.sh "$SIYUAN_VERSION" "$PWD/siyuan"
+
+      - name: Set up Go for patch compatibility tests
+        if: env.SIYUAN_VERSION != 'v3.5.8'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: custom/siyuan/kernel/go.mod
+          cache-dependency-path: custom/siyuan/kernel/go.sum
+
+      - name: Check API contracts and customized behavior
+        if: env.SIYUAN_VERSION != 'v3.5.8'
+        shell: bash
+        working-directory: custom/siyuan/kernel
         run: |
-          cd ${{ github.workspace }}/custom
-
-          echo "Cloning siyuan-note/siyuan@${{ github.event.inputs.version }}..."
-          git clone --branch ${{ github.event.inputs.version }} --depth=1 https://github.com/siyuan-note/siyuan.git
-          cd siyuan
-
-          echo "Applying patches..."
-          for patch in disable-update default-config mock-vip-user rename-endpoints; do
-            patch_file="${{ github.workspace }}/custom/patches/${patch}.patch"
-            if [ -f "$patch_file" ]; then
-              echo "  - ${patch}.patch"
-              git apply "$patch_file" || {
-                echo "ERROR: ${patch}.patch failed to apply against ${{ github.event.inputs.version }}"
-                echo "The patch may need to be regenerated for this version."
-                exit 1
-              }
-            fi
-          done
-
-          echo ""
-          echo "Applied changes:"
-          git diff --stat
+          set -euo pipefail
+          go run ./apicontract/cmd/apigen --check
+          go test -tags "fts5 sqlcipher" ./model ./api \
+            -run '^(TestCustom|TestCloudUserCachedDuringSync|TestAPIContractPutFile|TestAssetUploadContractAdapter|TestAssetUploadResultContractNullability|TestAPIContractSettingErrorsAndAdmission)' \
+            -count=1
 
       - name: Set up QEMU
+        if: contains(env.TARGET_PLATFORMS, 'linux/arm64')
         uses: docker/setup-qemu-action@v3
 
       - name: Setup Docker buildx
@@ -71,12 +93,33 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USER }}
           password: ${{ secrets.DOCKER_HUB_PWD }}
 
-      - name: Build and push Docker image
-        working-directory: ${{ github.workspace }}/custom/siyuan
+      - name: Build and push candidate image
+        shell: bash
+        working-directory: custom
         run: |
-          docker buildx build \
-            --push \
-            --platform linux/amd64,linux/arm64 \
-            -t ${{ secrets.DOCKER_HUB_USER }}/siyuan-custom:latest \
-            -t ${{ secrets.DOCKER_HUB_USER }}/siyuan-custom:${{ github.event.inputs.version }} \
-            .
+          set -euo pipefail
+          SOURCE_SHA="$(git -C siyuan rev-parse HEAD)"
+          MANIFEST_SHA="$(sha256sum siyuan/source-manifest.json | cut -d ' ' -f 1)"
+          printf '%s\n' "$IMAGE_REF" > image-reference.txt
+          docker buildx build --push --platform "$TARGET_PLATFORMS" \
+            --label "org.opencontainers.image.source=https://github.com/JimEverest/siyuan-custom" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${SIYUAN_VERSION}" \
+            --label "io.siyuan.upstream.revision=${SOURCE_SHA}" \
+            --label "io.siyuan.source-manifest.sha256=${MANIFEST_SHA}" \
+            --metadata-file "$PWD/build-metadata.json" \
+            -t "$IMAGE_REF" siyuan
+          printf 'Candidate image: `%s`\n' "$IMAGE_REF" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Upstream commit: `%s`\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve build provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: siyuan-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            custom/siyuan/source-manifest.json
+            custom/build-metadata.json
+            custom/image-reference.txt
+          if-no-files-found: warn
+          retention-days: 90

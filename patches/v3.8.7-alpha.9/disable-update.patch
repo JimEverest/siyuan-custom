@@ -1,0 +1,67 @@
+diff --git a/kernel/api/system.go b/kernel/api/system.go
+index a374633..f4e9e90 100644
+--- a/kernel/api/system.go
++++ b/kernel/api/system.go
+@@ -425,8 +425,7 @@ func normalizeCustomEmojiPath(name, ext string) (string, error) {
+ var checkUpdate = contractHandler(apicontract.SystemCheckUpdate, func(c *gin.Context, request apicontract.SystemCheckUpdateRequest) (ret apicontract.Response[apicontract.Null]) {
+ 	ret = apicontract.Success(apicontract.Null{})
+ 
+-	showMsg := request.ShowMsg
+-	model.CheckUpdate(showMsg)
++	// Custom builds are updated only through the managed Docker deployment.
+ 	return
+ })
+ 
+diff --git a/kernel/conf/system.go b/kernel/conf/system.go
+index c1f30b5..24eca99 100644
+--- a/kernel/conf/system.go
++++ b/kernel/conf/system.go
+@@ -73,7 +73,7 @@ type Onboarding struct {
+ func NewSystem() *System {
+ 	return &System{
+ 		NetworkProxy:       &NetworkProxy{},
+-		DownloadInstallPkg: true,
++		DownloadInstallPkg: false,
+ 		UpdateChannel:      UpdateChannelStable,
+ 	}
+ }
+diff --git a/kernel/model/mount.go b/kernel/model/mount.go
+index 6961d9c..c1d3ab9 100644
+--- a/kernel/model/mount.go
++++ b/kernel/model/mount.go
+@@ -565,11 +565,7 @@ func mountBox(boxID string) (alreadyMount bool, err error) {
+ 		}
+ 
+ 		task.AppendAsyncTaskWithDelay(task.PushMsg, 3*time.Second, util.PushErrMsg, Conf.Language(244), 7000)
+-		go func() {
+-			// 每次打开帮助文档时自动检查版本更新并提醒 https://github.com/siyuan-note/siyuan/issues/5057
+-			time.Sleep(time.Second * 10)
+-			CheckUpdate(true)
+-		}()
++		// Custom builds do not check for official updates when opening the help notebook.
+ 	}
+ 
+ 	if !gulu.File.IsDir(localPath) {
+diff --git a/kernel/model/updater.go b/kernel/model/updater.go
+index 480277b..2e161de 100644
+--- a/kernel/model/updater.go
++++ b/kernel/model/updater.go
+@@ -31,6 +31,7 @@ import (
+ 	"github.com/88250/gulu"
+ 	"github.com/imroc/req/v3"
+ 	"github.com/siyuan-note/logging"
++	"github.com/siyuan-note/siyuan/kernel/conf"
+ 	"github.com/siyuan-note/siyuan/kernel/util"
+ 	"golang.org/x/mod/semver"
+ )
+@@ -286,6 +287,10 @@ func isVersionUpToDate(releaseVer string) bool {
+ var skipInstallPkgPlatformCached = -1
+ 
+ func skipNewVerInstallPkg() bool {
++	// Keep existing workspaces from downloading an official installer over this custom build.
++	if Conf.LoadSystem().DownloadInstallPkg {
++		UpdateSystemConf(func(system *conf.System) { system.DownloadInstallPkg = false })
++	}
+ 	confSystemSnapshot := Conf.LoadSystem()
+ 
+ 	if skipInstallPkgPlatformCached == -1 {
