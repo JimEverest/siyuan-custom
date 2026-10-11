@@ -100,8 +100,9 @@ def main():
             assert status in (401,403),'unauthenticated upload allowed: '+route
         checks['upload_auth_required']=True
         docrows=api('/api/query/sql',{'stmt':"SELECT count(*) AS n FROM blocks WHERE type='d'"})
-        checks['document_index_readable']=bool(docrows and docrows[0]['n']>0)
-        assert checks['document_index_readable'],'document index empty'
+        baseline=json.loads((Path(a.output).parent/'index-baseline.json').read_text())
+        checks['document_index_readable']=bool(docrows and docrows[0]['n']>=baseline['document_index_count'])
+        assert checks['document_index_readable'],'document index count regressed'
         completed=True
     finally:
         cleanup=True
