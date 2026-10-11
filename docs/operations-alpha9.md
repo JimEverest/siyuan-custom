@@ -4,7 +4,7 @@ This procedure applies only to the audited Azure VM and the October 2026 migrati
 
 ## Build identity
 
-Build the official `v3.8.7-alpha.9` source at `def127fc774ab2b5ab9a0096609a15aa5ba30df4` using the four custom behavior patches and the Docker build-input correction in `patches/v3.8.7-alpha.9`. The workflow publishes a unique candidate tag and a source manifest. Deployment uses the resulting immutable registry digest, with the source revision and source-manifest digest checked against the image labels.
+Build the official `v3.8.7-alpha.9` source at `def127fc774ab2b5ab9a0096609a15aa5ba30df4` using the four custom behavior patches and the Docker build corrections in `patches/v3.8.7-alpha.9`. These supply a shared frontend JSON file, install the patch executable used by ONNX dependencies, and apply Alpine's [glibc-guarded backtrace patch](https://raw.githubusercontent.com/alpinelinux/aports/3.23-stable/community/onnxruntime/no-execinfo.patch) to the pinned ONNX source. The shared-library build explicitly disables ONNX unit-test targets, which were already not run, to avoid the musl math-function signature incompatibility in those test sources. Application compatibility tests and deployment acceptance checks remain enabled. The workflow publishes a unique candidate tag and a source manifest. Deployment uses the resulting immutable registry digest, with the source revision and source-manifest digest checked against the image labels.
 
 ## Data and rollback protection
 

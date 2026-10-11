@@ -5,5 +5,6 @@
   "patch_directory": "patches/v3.8.7-alpha.9",
   "prerelease": true,
   "required_build_patch": "docker-build.patch",
-  "build_patch_reason": "Include the shared lunar-calendar JSON in node-build, and install patch for the ONNX Runtime Eigen dependency build."
+  "build_patch_reason": "Include the shared lunar-calendar JSON in node-build, install patch for ONNX Runtime dependencies, apply Alpine's glibc-guarded backtrace compatibility patch to the pinned ONNX source, and omit upstream ONNX test binaries from this shared-library runtime build.",
+  "onnxruntime_musl_patch_source": "https://raw.githubusercontent.com/alpinelinux/aports/3.23-stable/community/onnxruntime/no-execinfo.patch"
 }
