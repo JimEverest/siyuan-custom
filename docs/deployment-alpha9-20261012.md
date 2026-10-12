@@ -1,5 +1,7 @@
 # Azure SiYuan upgrade — completed 2026-10-12
 
+The complete Chinese retrospective and future upgrade checklist are in [定制思源升级复盘与后续 Agent 操作指南](upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md).
+
 The Azure service was upgraded from the customized 3.5.8 installation to **3.8.7-alpha.9**. It is running at the existing HTTPS address, with the original authentication, upload endpoint overrides, local account behavior, appearance resources, settings and notes retained. This is the explicitly selected prerelease version.
 
 - Production URL: https://obslinux.centralindia.cloudapp.azure.com/

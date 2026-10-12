@@ -1,5 +1,7 @@
 # SiYuan 3.8.7 alpha.9 Upgrade Implementation Plan
 
+> Historical plan: deployment completed on 2026-10-12. Start with the [detailed Chinese retrospective](../upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md) and [final report](../deployment-alpha9-20261012.md). The plan below is not a request to rerun the completed operation.
+
 > **For Codex:** Execute in this session with independent patch and build review. Production access is required before backup or deployment.
 
 **Goal:** Upgrade the existing customized SiYuan 3.5.8 service to v3.8.7-alpha.9 while retaining custom behavior and all notes.

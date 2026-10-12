@@ -1,5 +1,7 @@
 # Azure SiYuan alpha.9 deployment procedure
 
+For the detailed Chinese retrospective, decision rationale, actual failures and future-agent checklist, read [定制思源升级复盘与后续 Agent 操作指南](upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md).
+
 This procedure applies only to the audited Azure VM and the October 2026 migration. It is not a generic unattended updater. The deployment scripts refuse an unexpected original image, mount, port, restart policy, workspace layout or existing migration state.
 
 The migration completed on 2026-10-12. Production started at 00:17:02 UTC and final acceptance passed at 00:19:50 UTC. The original S3 sync setting was restored only after public application acceptance, and a subsequent observation found one completed sync phase and no sync-data-repository failure. See [the deployment report](deployment-alpha9-20261012.md) and [sanitized evidence](deployment-alpha9-evidence.json). These results describe this deployment; the scripts are not safe to replay against its finalized state.
