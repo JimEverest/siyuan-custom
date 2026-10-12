@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import runpy
 import urllib.request
 
 
@@ -130,15 +131,22 @@ def verify_appearance(stage, workspace, state, port):
         total_files += files
         verified_packages.append({'kind': kind, 'name': name, 'status': package['status'],
                                   'files_sha256_verified': files})
-    old = read_json(stage / 'production-conf-before.json')['appearance']
+    original_conf = read_json(stage / 'production-conf-before.json')
+    old = original_conf['appearance']
+    migration = runpy.run_path(str(Path(__file__).with_name('migrate-appearance.py')))
+    aliases = {}
+    if state.get('appearance_aliases_sha256') or (stage / 'appearance-aliases.json').exists():
+        aliases = migration['verify_aliases'](stage, workspace, state, original_conf)
     persisted = read_json(workspace / 'conf' / 'conf.json')['appearance']
     runtime = fetch_runtime_appearance(workspace, port)
+    preferences = migration['verify_preferences'](original_conf, persisted, runtime, aliases)
     selection = {}
     for key in ('icon', 'themeLight', 'themeDark'):
         require(isinstance(old.get(key), str) and old[key], 'Original appearance selection is unavailable')
-        require(persisted.get(key) == old[key], 'Persisted appearance selection changed: ' + key)
-        require(runtime.get(key) == old[key], 'Runtime appearance selection changed: ' + key)
-        selection[key] = old[key]
+        expected_selection = aliases.get(old[key], old[key]) if key == 'icon' else old[key]
+        require(persisted.get(key) == expected_selection, 'Persisted appearance selection changed: ' + key)
+        require(runtime.get(key) == expected_selection, 'Runtime appearance selection changed: ' + key)
+        selection[key] = expected_selection
     icons = package_names(runtime, 'icons')
     light = package_names(runtime, 'lightThemes')
     dark = package_names(runtime, 'darkThemes')
@@ -150,7 +158,10 @@ def verify_appearance(stage, workspace, state, port):
     for package in verified_packages:
         loaded = icons if package['kind'] == 'icons' else light | dark
         require(package['name'] in loaded, 'A preserved appearance package is not recognized by the new kernel')
+    require(set(aliases.values()).issubset(icons), 'A preserved legacy icon alias is not loaded')
     return {'passed': True, 'evidence_sha256': state['appearance_preservation_sha256'],
+            'alias_evidence_sha256': state.get('appearance_aliases_sha256'),
+            'preferences': preferences,
             'files_sha256_verified': total_files, 'packages': verified_packages,
             'selection_preserved': selection,
             'runtime_icons': sorted(icons), 'runtime_light_themes': sorted(light),

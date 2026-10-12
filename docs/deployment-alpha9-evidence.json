@@ -1,0 +1,94 @@
+{
+  "final": {
+    "passed": true,
+    "time": 1791764390.6331522,
+    "version": "3.8.7-alpha.9",
+    "notebooks": 33,
+    "sync_enabled_restored": true,
+    "sync_provider_preserved": 2,
+    "sync_last_attempt_timestamp": 1791764329979,
+    "sync_roundtrip_tested": false,
+    "api_token_preserved": true,
+    "language_preserved": "en",
+    "original_workspace_manifest_still_exact": true,
+    "old_container_preserved_stopped": true,
+    "private_snapshot_preserved": true,
+    "new_container_running": true,
+    "fatal_runtime_log_count": 0,
+    "unrelated_container_count": 7,
+    "free_disk_bytes": 4630687744,
+    "image_id": "sha256:b722afa234debc64c2a9a3de2ae62001281212c31c26417132fefd7da7841b02",
+    "image_reference": "ttqwer1/siyuan-custom@sha256:b722afa234debc64c2a9a3de2ae62001281212c31c26417132fefd7da7841b02",
+    "backup_path": "/home/nl/siyuan-upgrade-20261012-alpha9/workspace-before",
+    "downtime_started_at_utc": "2026-10-12T00:12:33Z",
+    "production_ready_at_utc": "2026-10-12T00:17:02Z"
+  },
+  "candidate_counts": {
+    "unchanged_note_files": 1858,
+    "unchanged_asset_files": 3954,
+    "sqlite_databases_checked": 1,
+    "unsupported_custom_tokenizer": 3,
+    "non_plaintext_databases_not_checked": 0
+  },
+  "production_counts": {
+    "unchanged_note_files": 1858,
+    "unchanged_asset_files": 3954,
+    "unchanged_other_containers": 7
+  },
+  "browser": {
+    "version": "3.8.7-alpha.9",
+    "configLoaded": true,
+    "editorCount": 1,
+    "blockCount": 68,
+    "authFormAbsent": true,
+    "page_error_count": 0,
+    "explicit_document_open": false,
+    "successful_document_responses": 1,
+    "api_error_count": 0,
+    "passed": true
+  },
+  "configuration_identity_counts": {
+    "expected_providers": 1,
+    "expected_models": 1,
+    "expected_mcp_servers": 0,
+    "checked_fields": 95
+  },
+  "settings_unchanged_fields": 115,
+  "appearance": {
+    "icon": "legacy-material",
+    "themeLight": "daylight",
+    "themeDark": "midnight"
+  },
+  "ocr": {
+    "passed": true,
+    "runtime_seconds": 0.382,
+    "synthetic_file_cleaned": true,
+    "recognized_rows": 1,
+    "elapsed_seconds": 3.11
+  },
+  "backup": {
+    "snapshot_id": "sha256:14e55fd302769797aed655476304e1166764ce774f0efc2ee33d80e424be81a0",
+    "snapshot_reference": "siyuan-custom-private:before-20261012-alpha9-retry4",
+    "manifest_sha256": "d4f6c5796ca0aa527ff2def75c49ba703bb4e5ff9dc10cd5249aeb4ac104f732",
+    "file_count": 25456
+  },
+  "production": {
+    "id": "96a9ae752f23f50fd8aee1e434187a7836c7b902d72e647bcb50aa1b61a04fd4",
+    "restart": "always",
+    "log_config": {
+      "Type": "json-file",
+      "Config": {}
+    },
+    "image_id": "sha256:b722afa234debc64c2a9a3de2ae62001281212c31c26417132fefd7da7841b02"
+  },
+  "sync_observation": {
+    "enabled": true,
+    "provider": 2,
+    "synced": 1791764329979,
+    "successful_sync_phase_log_count": 1,
+    "sync_data_repo_failure_count": 0,
+    "observed_at": 1791764457.202379,
+    "roundtrip_tested": false
+  },
+  "proxy_stopped": true
+}

@@ -68,6 +68,13 @@ def docker(*args, timeout=180):
     return run(['docker', *args], timeout).stdout.decode('utf-8')
 
 
+def create_rollback_snapshot(container_id):
+    # Docker versions may print deprecation warnings to commit stdout.
+    # Resolve the successful tag through structured image metadata instead.
+    docker('commit', '--pause=false', container_id, SNAPSHOT, timeout=1200)
+    return json.loads(docker('image', 'inspect', SNAPSHOT))[0]['Id']
+
+
 def inspect_container(name, missing_ok=False, size=False):
     args = ['docker', 'container', 'inspect'] + (['--size'] if size else []) + [name]
     result = run(args, check=False)
@@ -476,8 +483,7 @@ def prepare(args):
     save_state(state)
     stop_clean(state['old_id'])
     save_state(state, 'old-stopped')
-    state['snapshot_id'] = docker('commit', '--pause=false', state['old_id'], SNAPSHOT,
-                                  timeout=1200).strip()
+    state['snapshot_id'] = create_rollback_snapshot(state['old_id'])
     save_state(state, 'snapshot-created')
     space_required(estimate + 256 * 1024 ** 2)
     isolated_symlinks(ORIGINAL)

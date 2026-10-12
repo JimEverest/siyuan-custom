@@ -18,6 +18,24 @@ deploy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deploy)
 
 
+class SnapshotTests(unittest.TestCase):
+    def test_commit_stdout_warning_does_not_pollute_snapshot_id(self):
+        image_id = 'sha256:' + 'a' * 64
+        with patch.object(deploy, 'docker', side_effect=[
+                'Flag --pause has been deprecated\n' + image_id + '\n',
+                json.dumps([{'Id': image_id}])]) as docker:
+            self.assertEqual(deploy.create_rollback_snapshot('old-container'), image_id)
+        self.assertEqual(docker.call_args_list[0].args,
+                         ('commit', '--pause=false', 'old-container', deploy.SNAPSHOT))
+        self.assertEqual(docker.call_args_list[1].args, ('image', 'inspect', deploy.SNAPSHOT))
+
+    def test_failed_commit_never_accepts_an_existing_tag(self):
+        with patch.object(deploy, 'docker', side_effect=deploy.SafeError('commit failed')) as docker:
+            with self.assertRaisesRegex(deploy.SafeError, 'commit failed'):
+                deploy.create_rollback_snapshot('old-container')
+        self.assertEqual(docker.call_count, 1)
+
+
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
