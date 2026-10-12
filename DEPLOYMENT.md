@@ -1,5 +1,7 @@
 # 部署指南：Azure VM 上部署 siyuan-custom
 
+> **历史说明，勿直接照抄用于当前生产升级。** 下文的 `siyuan` 容器名、以 `:6807` 为主入口的部署方案、整份 Caddy 配置及 pull `latest` 后删除重建的命令，不应代替 2026-10-12 已核实的现网参数。本次使用原有 443 主入口且未修改 Caddy，不表示既有辅助入口需要删除。当前维护请先读[详细中文升级复盘与 Agent 指南](docs/upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md)、[最终部署报告](docs/deployment-alpha9-20261012.md)和[运维过程说明](docs/operations-alpha9.md)。每次操作仍须重新核对现场，不能用本文覆盖现有代理配置、删除保留的旧容器或直接给旧内核使用迁移后的数据。
+
 ## 架构概览
 
 ```

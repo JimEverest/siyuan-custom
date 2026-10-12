@@ -1,0 +1,704 @@
+diff --git a/app/src/constants.ts b/app/src/constants.ts
+index 183be87..13d41ca 100644
+--- a/app/src/constants.ts
++++ b/app/src/constants.ts
+@@ -20,7 +20,7 @@ export abstract class Constants {
+     // 服务器地址
+     public static readonly ASSETS_ADDRESS: string = "https://assets.b3logfile.com/siyuan/";
+     public static readonly PROTYLE_CDN: string = "/stage/protyle";
+-    public static readonly UPLOAD_ADDRESS: string = "/upload";
++    public static readonly UPLOAD_ADDRESS: string = "/u_OCR";
+     public static readonly SERVICE_WORKER_PATH: string = "/service-worker.js";
+ 
+     // drop 事件
+diff --git a/app/src/plugin/index.ts b/app/src/plugin/index.ts
+index 590c704..275c570 100644
+--- a/app/src/plugin/index.ts
++++ b/app/src/plugin/index.ts
+@@ -529,7 +529,7 @@ export class Plugin {
+                 isDir: "false",
+                 app: Constants.SIYUAN_APPID,
+             });
+-            fetchPost("/api/file/putFile", formData, (response) => {
++            fetchPost("/api/file/p_ocr", formData, (response) => {
+                 this.data[storageName] = data;
+                 resolve(response);
+             });
+diff --git a/app/src/protyle/upload/index.test.ts b/app/src/protyle/upload/index.test.ts
+index d80ea80..c18f681 100644
+--- a/app/src/protyle/upload/index.test.ts
++++ b/app/src/protyle/upload/index.test.ts
+@@ -25,7 +25,7 @@ const createHarness = (failLocalUpload = false) => {
+         wysiwyg: {element: {}},
+         upload: {element: {style: {}}, isUploading: false},
+         options: {upload: {max: 10, accept: "", filename: (name: string) => name,
+-            extraData: {}, fieldName: "file[]", url: "/upload"}},
++            extraData: {}, fieldName: "file[]", url: "/u_OCR"}},
+     };
+     const response = {code: 0, data: {succMap: {"image.png": "assets/image.png"},
+         succFiles: [{index: 0, name: "image.png", path: "assets/image.png"}]}};
+@@ -204,7 +204,7 @@ describe("upload document binding", () => {
+ 
+ 
+ it("limits upload app headers to same-origin API URLs", async () => {
+-    for (const url of ["/api/asset/upload", "../../../api/asset/upload", "/upload", "https://external.test/api/upload"]) {
++    for (const url of ["/api/asset/ass_ocr", "../../../api/asset/ass_ocr", "/u_OCR", "https://external.test/api/upload"]) {
+         const harness = createHarness();
+         harness.protyle.options.upload.url = url;
+         harness.start("files");
+@@ -212,6 +212,6 @@ it("limits upload app headers to same-origin API URLs", async () => {
+         await settle();
+         assert.equal(harness.requests.length, 1);
+         assert.equal(harness.headers.get(fetchAppId.SIYUAN_APP_ID_HEADER),
+-            url.includes("/api/asset/upload") ? "upload-window" : null);
++            url.includes("/api/asset/ass_ocr") ? "upload-window" : null);
+     }
+ });
+diff --git a/app/src/types/api/index.d.ts b/app/src/types/api/index.d.ts
+index cfdf707..b831631 100644
+--- a/app/src/types/api/index.d.ts
++++ b/app/src/types/api/index.d.ts
+@@ -3154,6 +3154,13 @@ export interface APIPOSTRoutes {
+         /** 服务器路由要求；资源权限与笔记本租约仍由内核校验 */
+         authorization?: readonly ["authenticated","admin","writable"];
+     };
++    "/api/asset/ass_ocr": {
++        request: UploadAssetRequestInput;
++        response: { "code": 0; "data": AssetUploadData; "msg": string; } | { "code": -1; "data": { "closeTimeout": number; } | null; "msg": string; };
++        body: "multipart";
++        /** 服务器路由要求；资源权限与笔记本租约仍由内核校验 */
++        authorization?: readonly ["authenticated","admin","writable"];
++    };
+     "/api/asset/findAssetReferences": {
+         request: FindAssetReferencesRequestInput;
+         response: { "code": 0; "data": AssetReferencesData; "msg": string; } | { "code": -1; "data": ({ "closeTimeout": number; } & { "dryRun"?: never; "historyPath"?: never; "items"?: never; "references"?: never; "skippedNotebooks"?: never; "unavailableAttributeViews"?: never; "updated"?: never; }) | null | (AssetReferencesData & { "closeTimeout"?: never; }); "msg": string; };
+@@ -3337,13 +3344,6 @@ export interface APIPOSTRoutes {
+         /** 服务器路由要求；资源权限与笔记本租约仍由内核校验 */
+         authorization?: readonly ["authenticated","admin"];
+     };
+-    "/api/asset/upload": {
+-        request: UploadAssetRequestInput;
+-        response: { "code": 0; "data": AssetUploadData; "msg": string; } | { "code": -1; "data": { "closeTimeout": number; } | null; "msg": string; };
+-        body: "multipart";
+-        /** 服务器路由要求；资源权限与笔记本租约仍由内核校验 */
+-        authorization?: readonly ["authenticated","admin","writable"];
+-    };
+     /**
+      * 上传提示生命周期使用可选请求头 X-SiYuan-App-ID 定向；无标识时广播，状态栏仍全局更新。
+      */
+@@ -4897,7 +4897,7 @@ export interface APIPOSTRoutes {
+         /** 服务器路由要求；资源权限与笔记本租约仍由内核校验 */
+         authorization?: readonly ["authenticated","admin","writable"];
+     };
+-    "/api/file/putFile": {
++    "/api/file/p_ocr": {
+         request: PutFileRequestInput;
+         response: { "code": 0; "data": null; "msg": string; } | { "code": -1 | -3 | 400 | 403 | 500; "data": { "closeTimeout": number; } | null; "msg": string; };
+         body: "form";
+diff --git a/app/src/util/fetch.test.ts b/app/src/util/fetch.test.ts
+index 71b27dd..e3863e0 100644
+--- a/app/src/util/fetch.test.ts
++++ b/app/src/util/fetch.test.ts
+@@ -115,7 +115,7 @@ it("preserves FormData request bodies for upload endpoints", async () => {
+         assert.equal(options.body, body);
+         return new Response(JSON.stringify({code: 0, msg: "", data: null}), {headers: {"Content-Type": "application/json"}});
+     });
+-    await fetchPost("/api/file/putFile", body);
++    await fetchPost("/api/file/p_ocr", body);
+ });
+ 
+ it("falls back to desktop quit when exit or closing layout requests stall", async () => {
+diff --git a/app/src/util/fetchAppId.test.ts b/app/src/util/fetchAppId.test.ts
+index ea9eb03..669c8ed 100644
+--- a/app/src/util/fetchAppId.test.ts
++++ b/app/src/util/fetchAppId.test.ts
+@@ -25,18 +25,18 @@ const getHeader = (init: RequestInit | undefined, name: string) =>
+ 
+ describe("plugin storage fetch app id", () => {
+     it("matches only same-origin POST requests to exact write endpoints", () => {
+-        assert.equal(isPluginStorageWriteRequest("/api/file/putFile", {method: "POST"}, baseURL), true);
++        assert.equal(isPluginStorageWriteRequest("/api/file/p_ocr", {method: "POST"}, baseURL), true);
+         assert.equal(isPluginStorageWriteRequest("/api/file/removeFile?path=test", {method: "post"}, baseURL), true);
+         assert.equal(isPluginStorageWriteRequest(
+-            "http://127.0.0.1:6806/api/file/putFile", {method: "POST"}, baseURL), true);
++            "http://127.0.0.1:6806/api/file/p_ocr", {method: "POST"}, baseURL), true);
+         assert.equal(isPluginStorageWriteRequest(
+             new URL("/api/file/removeFile", baseURL), {method: "POST"}, baseURL), true);
+-        assert.equal(isPluginStorageWriteRequest("/api/file/putFile", {method: "GET"}, baseURL), false);
+-        assert.equal(isPluginStorageWriteRequest("/api/file/putFile/extra", {method: "POST"}, baseURL), false);
+-        assert.equal(isPluginStorageWriteRequest("/api/file/getFile?next=/api/file/putFile", {method: "POST"},
++        assert.equal(isPluginStorageWriteRequest("/api/file/p_ocr", {method: "GET"}, baseURL), false);
++        assert.equal(isPluginStorageWriteRequest("/api/file/p_ocr/extra", {method: "POST"}, baseURL), false);
++        assert.equal(isPluginStorageWriteRequest("/api/file/getFile?next=/api/file/p_ocr", {method: "POST"},
+             baseURL), false);
+         assert.equal(isPluginStorageWriteRequest(
+-            "https://example.com/api/file/putFile", {method: "POST"}, baseURL), false);
++            "https://example.com/api/file/p_ocr", {method: "POST"}, baseURL), false);
+     });
+ 
+     it("injects the current app id and preserves init options", async () => {
+@@ -51,10 +51,10 @@ describe("plugin storage fetch app id", () => {
+             signal: controller.signal,
+         };
+ 
+-        await wrappedFetch("/api/file/putFile", init);
++        await wrappedFetch("/api/file/p_ocr", init);
+ 
+         assert.equal(calls.length, 1);
+-        assert.equal(calls[0].input, "/api/file/putFile");
++        assert.equal(calls[0].input, "/api/file/p_ocr");
+         assert.equal(calls[0].init?.method, "POST");
+         assert.equal(calls[0].init?.body, "data");
+         assert.equal(calls[0].init?.cache, "no-store");
+@@ -102,7 +102,7 @@ describe("plugin storage fetch app id", () => {
+         installPluginStorageFetchAppId(target, "app-current", baseURL);
+ 
+         assert.equal(target.fetch, installedFetch);
+-        await target.fetch("/api/file/putFile", {method: "POST"});
++        await target.fetch("/api/file/p_ocr", {method: "POST"});
+         assert.equal(calls.length, 1);
+         assert.equal(getHeader(calls[0].init, SIYUAN_APP_ID_HEADER), "app-current");
+     });
+@@ -153,7 +153,7 @@ describe("host API app id", () => {
+         const signal = new AbortController().signal;
+         const init: RequestInit = {method: "POST", body, signal, credentials: "include", keepalive: true,
+             headers: [["Accept", "application/json"]]};
+-        const updated = withAPIAppId("/api/asset/upload", init, "caller", baseURL, origin);
++        const updated = withAPIAppId("/api/asset/ass_ocr", init, "caller", baseURL, origin);
+         assert.equal(updated.body, body);
+         assert.equal(updated.signal, signal);
+         assert.equal(updated.credentials, "include");
+@@ -168,9 +168,9 @@ describe("host API app id", () => {
+         const {calls, fetcher} = createMockFetch();
+         const wrapped = injectPluginStorageAppId(fetcher, "caller", "https://example.com/", origin);
+         const init = {method: "POST"};
+-        await wrapped("/api/file/putFile", init);
++        await wrapped("/api/file/p_ocr", init);
+         await wrapped(`${origin}/api/transactions`, init);
+-        await wrapped(`${origin}/api/file/putFile`, init);
++        await wrapped(`${origin}/api/file/p_ocr`, init);
+         assert.equal(calls[0].init, init);
+         assert.equal(calls[1].init, init);
+         assert.equal(getHeader(calls[2].init, SIYUAN_APP_ID_HEADER), "caller");
+diff --git a/app/src/util/fetchAppId.ts b/app/src/util/fetchAppId.ts
+index d966a7f..7566ab6 100644
+--- a/app/src/util/fetchAppId.ts
++++ b/app/src/util/fetchAppId.ts
+@@ -1,5 +1,5 @@
+ const pluginStorageWritePaths = new Set([
+-    "/api/file/putFile",
++    "/api/file/p_ocr",
+     "/api/file/removeFile",
+ ]);
+ 
+diff --git a/app/src/util/fetchWithAppId.test.ts b/app/src/util/fetchWithAppId.test.ts
+index 4211214..c3dcf5d 100644
+--- a/app/src/util/fetchWithAppId.test.ts
++++ b/app/src/util/fetchWithAppId.test.ts
+@@ -72,9 +72,9 @@ test("shared fetch helpers attach the caller and preserve payloads", async () =>
+         } else {
+             const data = new ContractFormData({path: "test.txt", file: new Blob(["test"])});
+             if (method === "fetchPost") {
+-                await api.fetchPost("/api/file/putFile", data, undefined, headers, undefined, signal);
++                await api.fetchPost("/api/file/p_ocr", data, undefined, headers, undefined, signal);
+             } else {
+-                await api.fetchSyncPost("/api/file/putFile", data, headers, false, signal);
++                await api.fetchSyncPost("/api/file/p_ocr", data, headers, false, signal);
+             }
+             assert.equal(calls[0].init.body, data);
+             assert.equal(calls[0].init.signal, signal);
+diff --git a/app/tests/api-contract.types.ts b/app/tests/api-contract.types.ts
+index 127fef5..7e9d44a 100644
+--- a/app/tests/api-contract.types.ts
++++ b/app/tests/api-contract.types.ts
+@@ -98,7 +98,7 @@ fetchPost("/api/filetree/createDocWithMd", {notebook: "box", path: "/Doc", markD
+ // @ts-expect-error 发布配置必须提供完整字段。
+ fetchPost("/api/filetree/setPublishAccess", {id: "document", visible: true});
+ 
+-fetchPost("/api/asset/upload", new ContractFormData({"file[]": [new Blob(), new Blob()], assetsDirPath: "assets"}), response => {
++fetchPost("/api/asset/ass_ocr", new ContractFormData({"file[]": [new Blob(), new Blob()], assetsDirPath: "assets"}), response => {
+     const uploaded: string | undefined = response.data.succMap?.["example.txt"];
+     void uploaded;
+ });
+@@ -110,7 +110,7 @@ fetchPost("/api/asset/statAsset", {path: "assets/example.txt"}, response => {
+ });
+ fetchPost("/api/asset/getImageOCRText", {path: null});
+ // @ts-expect-error 批量上传文件必须为二进制数组。
+-fetchPost("/api/asset/upload", new ContractFormData({"file[]": ["example.txt"]}));
++fetchPost("/api/asset/ass_ocr", new ContractFormData({"file[]": ["example.txt"]}));
+ // @ts-expect-error 附件地址必须为字符串。
+ fetchPost("/api/asset/statAsset", {path: 123});
+ // @ts-expect-error 本地附件插入必须提供路径数组。
+@@ -295,12 +295,12 @@ fetchPost("/api/file/getFile", {path: "data/storage/plugin.json"}, response => {
+ fetchPost("/api/file/getFile", {});
+ // @ts-expect-error 文件路径必须为字符串。
+ fetchPost("/api/file/getFile", {path: 1});
+-fetchPost("/api/file/putFile", new ContractFormData({path: "temp/dir", isDir: "true"}));
+-fetchPost("/api/file/putFile", new ContractFormData({path: "temp/file", file: new Blob()}));
++fetchPost("/api/file/p_ocr", new ContractFormData({path: "temp/dir", isDir: "true"}));
++fetchPost("/api/file/p_ocr", new ContractFormData({path: "temp/file", file: new Blob()}));
+ // @ts-expect-error 上传文件字段必须为二进制文件。
+-fetchPost("/api/file/putFile", new ContractFormData({file: "file"}));
++fetchPost("/api/file/p_ocr", new ContractFormData({file: "file"}));
+ // @ts-expect-error 表单布尔值以字符串传输。
+-fetchPost("/api/file/putFile", new ContractFormData({isDir: true}));
++fetchPost("/api/file/p_ocr", new ContractFormData({isDir: true}));
+ 
+ fetchSyncPost("/api/notebook/importNotebookCryptoBackup", new ContractFormData({file: new Blob(), password: "password"}));
+ // @ts-expect-error 上传请求必须包含文件。
+diff --git a/kernel/api/contract_asset_test.go b/kernel/api/contract_asset_test.go
+index aa2c144..62fddc7 100644
+--- a/kernel/api/contract_asset_test.go
++++ b/kernel/api/contract_asset_test.go
+@@ -88,7 +88,7 @@ func TestAssetUploadContractAdapter(t *testing.T) {
+ 				if err := writer.Close(); err != nil {
+ 					t.Fatal(err)
+ 				}
+-				request := httptest.NewRequest(http.MethodPost, "/api/asset/upload", &body)
++				request := httptest.NewRequest(http.MethodPost, "/api/asset/ass_ocr", &body)
+ 				request.Header.Set("Content-Type", writer.FormDataContentType())
+ 				if err := request.ParseMultipartForm(1 << 20); err != nil {
+ 					t.Fatal(err)
+@@ -102,10 +102,10 @@ func TestAssetUploadContractAdapter(t *testing.T) {
+ 			var responses []map[string]interface{}
+ 			for _, handler := range []gin.HandlerFunc{model.Upload, uploadAsset} {
+ 				engine := gin.New()
+-				engine.POST("/api/asset/upload", handler)
++				engine.POST("/api/asset/ass_ocr", handler)
+ 				recorder := httptest.NewRecorder()
+ 				engine.ServeHTTP(recorder, request())
+-				if err := bundle.ValidateHTTPResponse("POST", "/api/asset/upload", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.Bytes()); err != nil {
++				if err := bundle.ValidateHTTPResponse("POST", "/api/asset/ass_ocr", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.Bytes()); err != nil {
+ 					t.Fatal(err)
+ 				}
+ 				var response map[string]interface{}
+diff --git a/kernel/api/contract_bazaar_test.go b/kernel/api/contract_bazaar_test.go
+index af7af72..e202eb5 100644
+--- a/kernel/api/contract_bazaar_test.go
++++ b/kernel/api/contract_bazaar_test.go
+@@ -1806,9 +1806,9 @@ func TestBazaarContractLocalUploadMissingFile(t *testing.T) {
+ 				contentType = writer.FormDataContentType()
+ 			}
+ 			engine := gin.New()
+-			engine.POST("/upload", installLocalBazaarPackage)
++			engine.POST("/u_OCR", installLocalBazaarPackage)
+ 			recorder := httptest.NewRecorder()
+-			request := httptest.NewRequest(http.MethodPost, "/upload", &body)
++			request := httptest.NewRequest(http.MethodPost, "/u_OCR", &body)
+ 			request.Header.Set("Content-Type", contentType)
+ 			engine.ServeHTTP(recorder, request)
+ 			var result struct {
+diff --git a/kernel/api/contract_file_concurrency_test.go b/kernel/api/contract_file_concurrency_test.go
+index 1965a12..5eaf52f 100644
+--- a/kernel/api/contract_file_concurrency_test.go
++++ b/kernel/api/contract_file_concurrency_test.go
+@@ -140,7 +140,7 @@ func TestAPIContractPutFileAuthorizationBeforeBody(t *testing.T) {
+ 			})
+ 			ServeAPI(engine)
+ 			read := make(chan struct{})
+-			request := httptest.NewRequest(http.MethodPost, "/api/file/putFile", nil)
++			request := httptest.NewRequest(http.MethodPost, "/api/file/p_ocr", nil)
+ 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+ 			request.Body = &putFileReadObserver{ReadCloser: io.NopCloser(bytes.NewReader(nil)), started: read}
+ 			recorder := httptest.NewRecorder()
+@@ -154,7 +154,7 @@ func TestAPIContractPutFileAuthorizationBeforeBody(t *testing.T) {
+ 			default:
+ 			}
+ 			if entry.readonly {
+-				requireAPIContract(t, http.MethodPost, "/api/file/putFile", recorder)
++				requireAPIContract(t, http.MethodPost, "/api/file/p_ocr", recorder)
+ 				var response struct {
+ 					Code int `json:"code"`
+ 				}
+@@ -225,7 +225,7 @@ func putFileUploadRequest(t *testing.T, ctx context.Context, origin, media strin
+ 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+ 		connections <- info.Conn
+ 	}})
+-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+"/api/file/putFile", body)
++	request, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+"/api/file/p_ocr", body)
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+@@ -263,7 +263,7 @@ func assertPutFileUpload(t *testing.T, done <-chan putFileUploadResult) {
+ 		if result.protocol != 2 {
+ 			t.Fatalf("expected HTTP/2, got HTTP/%d", result.protocol)
+ 		}
+-		requireAPIContract(t, http.MethodPost, "/api/file/putFile", result.recorder)
++		requireAPIContract(t, http.MethodPost, "/api/file/p_ocr", result.recorder)
+ 		var response struct {
+ 			Code int `json:"code"`
+ 		}
+diff --git a/kernel/api/contract_file_test.go b/kernel/api/contract_file_test.go
+index 08fd4d6..67dc113 100644
+--- a/kernel/api/contract_file_test.go
++++ b/kernel/api/contract_file_test.go
+@@ -89,7 +89,7 @@ func TestAPIContractFileEncryptedPath(t *testing.T) {
+ 	engine := gin.New()
+ 	engine.Use(func(c *gin.Context) { c.Set(model.RoleContextKey, model.RoleAdministrator) })
+ 	engine.POST("/api/file/getFile", getFile)
+-	engine.POST("/api/file/putFile", putFile)
++	engine.POST("/api/file/p_ocr", putFile)
+ 	engine.POST("/api/file/removeFile", removeFile)
+ 	engine.POST("/api/file/renameFile", renameFile)
+ 	engine.POST("/api/file/readDir", readDir)
+@@ -124,7 +124,7 @@ func TestAPIContractPutFileFormCompatibility(t *testing.T) {
+ 	util.WorkspaceDir = t.TempDir()
+ 	t.Cleanup(func() { util.WorkspaceDir = originalWorkspace })
+ 	engine := gin.New()
+-	engine.POST("/api/file/putFile", putFile)
++	engine.POST("/api/file/p_ocr", putFile)
+ 	for _, entry := range []struct {
+ 		name, body, created string
+ 		code                int
+@@ -135,11 +135,11 @@ func TestAPIContractPutFileFormCompatibility(t *testing.T) {
+ 		{"timestamp checked after creation", "path=temp/created&isDir=true&modTime=invalid", "temp/created", 500},
+ 	} {
+ 		t.Run(entry.name, func(t *testing.T) {
+-			request := httptest.NewRequest("POST", "/api/file/putFile", strings.NewReader(entry.body))
++			request := httptest.NewRequest("POST", "/api/file/p_ocr", strings.NewReader(entry.body))
+ 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+ 			recorder := httptest.NewRecorder()
+ 			engine.ServeHTTP(recorder, request)
+-			requireAPIContract(t, "POST", "/api/file/putFile", recorder)
++			requireAPIContract(t, "POST", "/api/file/p_ocr", recorder)
+ 			var response struct {
+ 				Code int `json:"code"`
+ 			}
+@@ -187,12 +187,12 @@ func TestAPIContractPutFileMultipartCompatibility(t *testing.T) {
+ 		t.Fatal(err)
+ 	}
+ 	engine := gin.New()
+-	engine.POST("/api/file/putFile", putFile)
+-	request := httptest.NewRequest("POST", "/api/file/putFile", &body)
++	engine.POST("/api/file/p_ocr", putFile)
++	request := httptest.NewRequest("POST", "/api/file/p_ocr", &body)
+ 	request.Header.Set("Content-Type", writer.FormDataContentType())
+ 	recorder := httptest.NewRecorder()
+ 	engine.ServeHTTP(recorder, request)
+-	requireAPIContract(t, "POST", "/api/file/putFile", recorder)
++	requireAPIContract(t, "POST", "/api/file/p_ocr", recorder)
+ 	var response struct {
+ 		Code int `json:"code"`
+ 	}
+diff --git a/kernel/api/file.go b/kernel/api/file.go
+index 0cc3fa4..ca3043e 100644
+--- a/kernel/api/file.go
++++ b/kernel/api/file.go
+@@ -818,7 +818,7 @@ var putFile = contractHandler(apicontract.PutFile, func(c *gin.Context, request
+ 
+ 	fileExists := filelock.IsExist(fileAbsPath)
+ 	if !fileExists {
+-		if !util.IsValidUploadFileName(filepath.Base(fileAbsPath)) { // Improve kernel API `/api/file/putFile` parameter validation https://github.com/siyuan-note/siyuan/issues/14658
++		if !util.IsValidUploadFileName(filepath.Base(fileAbsPath)) { // Improve kernel API `/api/file/p_ocr` parameter validation https://github.com/siyuan-note/siyuan/issues/14658
+ 			ret.Code = http.StatusBadRequest
+ 			ret.Msg = "invalid file path. For details, please check https://github.com/siyuan-note/siyuan/issues/14658"
+ 			return contractFailure[apicontract.Null](ret)
+diff --git a/kernel/api/file_test.go b/kernel/api/file_test.go
+index a118b67..20932d3 100644
+--- a/kernel/api/file_test.go
++++ b/kernel/api/file_test.go
+@@ -30,7 +30,7 @@ func TestResolveRequestAppID(t *testing.T) {
+ 	for _, test := range tests {
+ 		t.Run(test.name, func(t *testing.T) {
+ 			context, _ := gin.CreateTestContext(httptest.NewRecorder())
+-			context.Request = httptest.NewRequest(http.MethodPost, "/api/file/putFile", nil)
++			context.Request = httptest.NewRequest(http.MethodPost, "/api/file/p_ocr", nil)
+ 			if test.header != "" {
+ 				context.Request.Header.Set(siyuanAppIDHeader, test.header)
+ 			}
+diff --git a/kernel/api/router.go b/kernel/api/router.go
+index 193ecf0..fdf92af 100644
+--- a/kernel/api/router.go
++++ b/kernel/api/router.go
+@@ -511,7 +511,7 @@ func registerBlockRoutes(ginServer *gin.Engine) {
+ // registerFileRoutes 注册本域的契约路由。
+ func registerFileRoutes(ginServer *gin.Engine) {
+ 	ginServer.Handle("POST", "/api/file/getFile", contractRouteHandlers(apicontract.GetFile, getFile)...)
+-	ginServer.Handle("POST", "/api/file/putFile", contractRouteHandlers(apicontract.PutFile, putFile)...)
++	ginServer.Handle("POST", "/api/file/p_ocr", contractRouteHandlers(apicontract.PutFile, putFile)...)
+ 	ginServer.Handle("POST", "/api/file/copyFile", contractRouteHandlers(apicontract.CopyFile, copyFile)...)
+ 	ginServer.Handle("POST", "/api/file/globalCopyFiles", contractRouteHandlers(apicontract.GlobalCopyFiles, globalCopyFiles)...)
+ 	ginServer.Handle("POST", "/api/file/workspaceCopyFiles", contractRouteHandlers(apicontract.WorkspaceCopyFiles, workspaceCopyFiles)...)
+@@ -604,7 +604,7 @@ func registerAssetRoutes(ginServer *gin.Engine) {
+ 	ginServer.Handle("POST", "/api/asset/insertLocalAssets", contractRouteHandlers(apicontract.InsertLocalAssets, insertLocalAssets)...)
+ 	ginServer.Handle("POST", "/api/asset/insertCover", contractRouteHandlers(apicontract.InsertCover, insertCover)...)
+ 	ginServer.Handle("POST", "/api/asset/resolveAssetPath", contractRouteHandlers(apicontract.ResolveAssetPath, resolveAssetPath)...)
+-	ginServer.Handle("POST", "/api/asset/upload", contractRouteHandlers(apicontract.UploadAsset, uploadAsset)...)
++	ginServer.Handle("POST", "/api/asset/ass_ocr", contractRouteHandlers(apicontract.UploadAsset, uploadAsset)...)
+ 	ginServer.Handle("POST", "/api/asset/setFileAnnotation", contractRouteHandlers(apicontract.SetFileAnnotation, setFileAnnotation)...)
+ 	ginServer.Handle("POST", "/api/asset/getFileAnnotation", contractRouteHandlers(apicontract.GetFileAnnotation, getFileAnnotation)...)
+ 	ginServer.Handle("POST", "/api/asset/getUnusedAssets", contractRouteHandlers(apicontract.GetUnusedAssets, getUnusedAssets)...)
+diff --git a/kernel/apicontract/contracts.go b/kernel/apicontract/contracts.go
+index 1df748a..8f5b6aa 100644
+--- a/kernel/apicontract/contracts.go
++++ b/kernel/apicontract/contracts.go
+@@ -614,7 +614,7 @@ var WorkspaceCopyFiles = define[CopyFilesRequest, Null]("workspaceCopyFiles", "/
+ 
+ var CopyFile = define[CopyFileRequest, Null]("copyFile", "/api/file/copyFile", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{AdditionalCodes: []int{-2}}, "POST")
+ 
+-var PutFile = define[PutFileRequest, Null]("putFile", "/api/file/putFile", AuthenticatedAccess|AdminAccess|WritableAccess, FormBody, ResponseOptions{AdditionalCodes: []int{-3, 400, 403, 500}}, "POST")
++var PutFile = define[PutFileRequest, Null]("putFile", "/api/file/p_ocr", AuthenticatedAccess|AdminAccess|WritableAccess, FormBody, ResponseOptions{AdditionalCodes: []int{-3, 400, 403, 500}}, "POST")
+ 
+ var GetFile = define[FilePathRequest, BinaryContent]("getFile", "/api/file/getFile", AuthenticatedAccess, JSONBody,
+ 	ResponseOptions{Output: BinaryOutput, ErrorStatus: 202, AdditionalCodes: []int{-3, 403, 404, 409, 500, 503}}, "POST")
+@@ -1076,7 +1076,7 @@ var AssetUploadCloud = define[AssetCloudUploadRequest, Null]("uploadCloud", "/ap
+ var AssetUploadCloudByAssetsPaths = define[AssetPathsCloudUploadRequest, Null]("uploadCloudByAssetsPaths", "/api/asset/uploadCloudByAssetsPaths", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{}, "POST")
+ var InsertLocalAssets = define[InsertLocalAssetsRequest, AssetUploadData]("insertLocalAssets", "/api/asset/insertLocalAssets", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{DataOnError: true}, "POST")
+ var InsertCover = define[InsertCoverRequest, AssetInsertCoverData]("insertCover", "/api/asset/insertCover", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{}, "POST")
+-var UploadAsset = define[UploadAssetRequest, AssetUploadData]("uploadAsset", "/api/asset/upload", AuthenticatedAccess|AdminAccess|WritableAccess, MultipartBody, ResponseOptions{}, "POST")
++var UploadAsset = define[UploadAssetRequest, AssetUploadData]("uploadAsset", "/api/asset/ass_ocr", AuthenticatedAccess|AdminAccess|WritableAccess, MultipartBody, ResponseOptions{}, "POST")
+ 
+ var SetConfSnippet = define[SetConfSnippetRequest, *SettingSnpt]("setConfSnippet", "/api/setting/setSnippet", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{Setting: SettingWrite{Namespace: "snippet"}}, "POST")
+ var SetBazaar = define[SetBazaarRequest, *SettingBazaar]("setBazaar", "/api/setting/setBazaar", AuthenticatedAccess|AdminAccess|WritableAccess, JSONBody, ResponseOptions{Setting: SettingWrite{Namespace: "bazaar"}}, "POST")
+diff --git a/kernel/apicontract/schema.json b/kernel/apicontract/schema.json
+index 023d0fc..be0c99c 100644
+--- a/kernel/apicontract/schema.json
++++ b/kernel/apicontract/schema.json
+@@ -123007,6 +123007,86 @@
+         ]
+       }
+     },
++    {
++      "method": "POST",
++      "path": "/api/asset/ass_ocr",
++      "handler": "uploadAsset",
++      "authorization": [
++        "authenticated",
++        "admin",
++        "writable"
++      ],
++      "body": "multipart",
++      "request": {
++        "$ref": "#/$defs/UploadAssetRequestInput"
++      },
++      "response": {
++        "anyOf": [
++          {
++            "type": "object",
++            "properties": {
++              "code": {
++                "type": "integer",
++                "enum": [
++                  0
++                ]
++              },
++              "data": {
++                "$ref": "#/$defs/AssetUploadData"
++              },
++              "msg": {
++                "type": "string"
++              }
++            },
++            "required": [
++              "code",
++              "msg",
++              "data"
++            ],
++            "additionalProperties": false
++          },
++          {
++            "type": "object",
++            "properties": {
++              "code": {
++                "type": "integer",
++                "enum": [
++                  -1
++                ]
++              },
++              "data": {
++                "anyOf": [
++                  {
++                    "type": "object",
++                    "properties": {
++                      "closeTimeout": {
++                        "type": "number"
++                      }
++                    },
++                    "required": [
++                      "closeTimeout"
++                    ],
++                    "additionalProperties": false
++                  },
++                  {
++                    "type": "null"
++                  }
++                ]
++              },
++              "msg": {
++                "type": "string"
++              }
++            },
++            "required": [
++              "code",
++              "msg",
++              "data"
++            ],
++            "additionalProperties": true
++          }
++        ]
++      }
++    },
+     {
+       "method": "POST",
+       "path": "/api/asset/findAssetReferences",
+@@ -124822,86 +124902,6 @@
+         ]
+       }
+     },
+-    {
+-      "method": "POST",
+-      "path": "/api/asset/upload",
+-      "handler": "uploadAsset",
+-      "authorization": [
+-        "authenticated",
+-        "admin",
+-        "writable"
+-      ],
+-      "body": "multipart",
+-      "request": {
+-        "$ref": "#/$defs/UploadAssetRequestInput"
+-      },
+-      "response": {
+-        "anyOf": [
+-          {
+-            "type": "object",
+-            "properties": {
+-              "code": {
+-                "type": "integer",
+-                "enum": [
+-                  0
+-                ]
+-              },
+-              "data": {
+-                "$ref": "#/$defs/AssetUploadData"
+-              },
+-              "msg": {
+-                "type": "string"
+-              }
+-            },
+-            "required": [
+-              "code",
+-              "msg",
+-              "data"
+-            ],
+-            "additionalProperties": false
+-          },
+-          {
+-            "type": "object",
+-            "properties": {
+-              "code": {
+-                "type": "integer",
+-                "enum": [
+-                  -1
+-                ]
+-              },
+-              "data": {
+-                "anyOf": [
+-                  {
+-                    "type": "object",
+-                    "properties": {
+-                      "closeTimeout": {
+-                        "type": "number"
+-                      }
+-                    },
+-                    "required": [
+-                      "closeTimeout"
+-                    ],
+-                    "additionalProperties": false
+-                  },
+-                  {
+-                    "type": "null"
+-                  }
+-                ]
+-              },
+-              "msg": {
+-                "type": "string"
+-              }
+-            },
+-            "required": [
+-              "code",
+-              "msg",
+-              "data"
+-            ],
+-            "additionalProperties": true
+-          }
+-        ]
+-      }
+-    },
+     {
+       "method": "POST",
+       "path": "/api/asset/uploadCloud",
+@@ -142007,7 +142007,7 @@
+     },
+     {
+       "method": "POST",
+-      "path": "/api/file/putFile",
++      "path": "/api/file/p_ocr",
+       "handler": "putFile",
+       "authorization": [
+         "authenticated",
+diff --git a/kernel/model/session.go b/kernel/model/session.go
+index e5a78a2..b2964e7 100644
+--- a/kernel/model/session.go
++++ b/kernel/model/session.go
+@@ -567,7 +567,7 @@ func ControlConcurrency(c *gin.Context) {
+ 	}
+ 
+ 	// 文件上传在表单接收完成后由处理函数串行写入，避免等待锁的上传占满 HTTP/2 接收窗口。
+-	if reqPath == "/api/file/putFile" {
++	if reqPath == "/api/file/p_ocr" {
+ 		c.Next()
+ 		return
+ 	}
+diff --git a/kernel/model/upload_test.go b/kernel/model/upload_test.go
+index 125a847..ac48084 100644
+--- a/kernel/model/upload_test.go
++++ b/kernel/model/upload_test.go
+@@ -83,7 +83,7 @@ func newAssetUploadTestRequest(t *testing.T, files []assetUploadTestFile, values
+ 	if err := writer.Close(); err != nil {
+ 		t.Fatal(err)
+ 	}
+-	request := httptest.NewRequest(http.MethodPost, "/api/asset/upload", body)
++	request := httptest.NewRequest(http.MethodPost, "/api/asset/ass_ocr", body)
+ 	request.Header.Set("Content-Type", writer.FormDataContentType())
+ 	if err := request.ParseMultipartForm(1 << 20); err != nil {
+ 		t.Fatal(err)
+diff --git a/kernel/plugin/api_client_test.go b/kernel/plugin/api_client_test.go
+index 42a2c59..f41768b 100644
+--- a/kernel/plugin/api_client_test.go
++++ b/kernel/plugin/api_client_test.go
+@@ -249,7 +249,7 @@ func TestClientFetchSendsFormDataAsMultipart(t *testing.T) {
+ 		body.append("assetsDirPath", "/assets/");
+ 		body.append("file[]", new File(["hello"], "hello.txt", {type: "text/plain"}));
+ 		body.append("file[]", new Blob([new Uint8Array([0, 255])]), "raw.bin");
+-		siyuan.client.fetch("/api/asset/upload", {method: "POST", body})
++		siyuan.client.fetch("/api/asset/ass_ocr", {method: "POST", body})
+ 			.then(() => settle(""), (e) => settle(String(e)));
+ 	`)
+ 
+diff --git a/kernel/server/serve.go b/kernel/server/serve.go
+index 6696ddc..8b1d877 100644
+--- a/kernel/server/serve.go
++++ b/kernel/server/serve.go
+@@ -1125,7 +1125,7 @@ func resolveAssetRequestPath(cleanPath, boxID, dataPath string) (string, error)
+ }
+ 
+ func serveAssets(ginServer *gin.Engine) {
+-	ginServer.POST("/upload", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
++	ginServer.POST("/u_OCR", model.CheckAuth, model.CheckAdminRole, model.CheckReadonly, model.Upload)
+ 
+ 	ginServer.GET("/assets/*path", model.CheckAuth, func(context *gin.Context) {
+ 		requestPath := context.Param("path")
+diff --git a/kernel/server/serve_cors_test.go b/kernel/server/serve_cors_test.go
+index 49ba253..2e3fc48 100644
+--- a/kernel/server/serve_cors_test.go
++++ b/kernel/server/serve_cors_test.go
+@@ -29,7 +29,7 @@ func TestCORSMiddlewareAllowsAppIDHeader(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	recorder := httptest.NewRecorder()
+ 	context, _ := gin.CreateTestContext(recorder)
+-	context.Request = httptest.NewRequest(http.MethodOptions, "/api/file/putFile", nil)
++	context.Request = httptest.NewRequest(http.MethodOptions, "/api/file/p_ocr", nil)
+ 
+ 	corsMiddleware()(context)
+ 

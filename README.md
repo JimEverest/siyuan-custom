@@ -4,6 +4,16 @@
 
 通过 patch 机制修改源码后构建镜像，无需维护完整的 fork 分支。
 
+## 已完成升级与维护入口
+
+2026-10-12 已将 Azure 上的定制版从 3.5.8 升级至 **3.8.7-alpha.9**。后续维护者和 Agent 请先阅读：
+
+- **[详细中文复盘与后续 Agent 操作指南](docs/upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md)**：决策依据、实际步骤、构建／迁移踩坑、验证方法、回滚边界和下一次升级清单。
+- [最终部署报告](docs/deployment-alpha9-20261012.md)与[脱敏验收证据](docs/deployment-alpha9-evidence.json)。
+- [运维过程说明](docs/operations-alpha9.md)与[历史操作脚本](ops/2026-10-12-alpha9/)。
+
+本次脚本含固定现场路径、镜像和轮次断言，不能直接重放为下一次升级。下方旧版镜像运行示例及 `DEPLOYMENT.md` 的历史参数，不应代替现网核验；生产升级需要完整数据保护、固定镜像和分阶段验收。
+
 ## 工作原理
 
 ```
@@ -101,7 +111,37 @@ cd siyuan-custom
 
 ## Patch 兼容性
 
-Patch 文件针对特定版本的源码生成（当前适配 **v3.5.8**）。当上游版本更新导致代码变动较大时，patch 可能无法应用，CI 构建会报错退出。
+### v3.8.7-alpha.9 候选构建
+
+`releases/v3.8.7-alpha.9.json` 固定上游提交
+`def127fc774ab2b5ab9a0096609a15aa5ba30df4`，对应补丁位于
+`patches/v3.8.7-alpha.9/`。原始 `patches/*.patch` 继续用于 v3.5.8。
+
+新版采用分节配置和 API 契约；补丁同步调整路由、契约、生成类型、插件调用及上传并发处理，
+保留三个定制上传地址和原有鉴权。新建工作区的语言默认值为 `zh-CN`；已有用户配置由上游迁移，
+不会强制覆盖。免登录账户只用于本地和自托管功能，不提供官方云服务账户。
+
+本地构建现在必须明确传版本；alpha.9 的五份必需补丁（四份业务补丁及一份构建补丁）缺失，或上游提交不匹配，都会立即失败：
+
+```bash
+bash build-docker.sh v3.8.7-alpha.9 ttqwer1
+```
+
+`Release Docker Image` 工作流默认构建 linux/amd64，运行 API 契约检查和定向 Go 测试，
+再生成含 run ID 的候选镜像。准备期间不覆盖 `latest`；生产应使用验证过的 digest。
+构建 artifact 保存源提交、补丁 SHA256、完整修改摘要和镜像构建元数据。
+此 alpha 版本额外包含 `docker-build.patch`，补齐官方 Docker 前端构建阶段缺少的农历数据文件，
+安装 ONNX Runtime 的 Eigen 依赖构建需要的 `patch` 工具，并应用 Alpine 官方维护的
+`execinfo.h` 兼容补丁。后者仅调整诊断回溯代码的 glibc 条件，不改变 OCR 识别逻辑。
+共享库构建明确关闭原本不会运行的 ONNX 单元测试目标，避免 musl 数学函数声明与测试模板不兼容；
+应用自身的定向测试与部署验收仍然保留。
+
+v3.8.7-alpha.9 是预发布版，启动命令须包含 `serve`。
+升级前必须保留旧容器的可写层和停止写入后的完整工作区，包括 `conf`、`data`、`repo`、
+`history`、`temp`。新版会迁移配置与主题目录，回退时应恢复配套的旧工作区，不能只换旧镜像。
+本次具体流程和结果见[中文复盘](docs/upgrade-retrospective-3.5.8-to-3.8.7-alpha9.zh-CN.md)与[部署报告](docs/deployment-alpha9-20261012.md)。原实施计划保留为历史材料；未来仍需分别验证源码、构建和生产部署。
+
+Patch 文件针对特定版本的源码生成：根目录补丁用于 **v3.5.8**，`patches/v3.8.7-alpha.9/` 用于本次 alpha.9。其他新版本需准备对应补丁目录和固定源码 manifest；上游变化可能导致 patch 或语义不再兼容，不能只更换版本号。
 
 此时需要重新生成 patch：
 

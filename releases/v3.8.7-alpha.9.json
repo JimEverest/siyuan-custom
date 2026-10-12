@@ -1,0 +1,10 @@
+{
+  "version": "v3.8.7-alpha.9",
+  "upstream_repository": "https://github.com/siyuan-note/siyuan.git",
+  "upstream_commit": "def127fc774ab2b5ab9a0096609a15aa5ba30df4",
+  "patch_directory": "patches/v3.8.7-alpha.9",
+  "prerelease": true,
+  "required_build_patch": "docker-build.patch",
+  "build_patch_reason": "Include the shared lunar-calendar JSON in node-build, install patch for ONNX Runtime dependencies, apply Alpine's glibc-guarded backtrace compatibility patch to the pinned ONNX source, and omit upstream ONNX test binaries from this shared-library runtime build.",
+  "onnxruntime_musl_patch_source": "https://raw.githubusercontent.com/alpinelinux/aports/3.23-stable/community/onnxruntime/no-execinfo.patch"
+}

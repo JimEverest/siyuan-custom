@@ -1,0 +1,265 @@
+diff --git a/kernel/api/contract_cloud_user_cached_test.go b/kernel/api/contract_cloud_user_cached_test.go
+index 126a108..2369918 100644
+--- a/kernel/api/contract_cloud_user_cached_test.go
++++ b/kernel/api/contract_cloud_user_cached_test.go
+@@ -9,15 +9,21 @@ import (
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/siyuan-note/siyuan/kernel/conf"
+ 	"github.com/siyuan-note/siyuan/kernel/model"
++	"github.com/siyuan-note/siyuan/kernel/util"
+ )
+ 
+-func TestAPIContractSettingCloudUserCached(t *testing.T) {
++func TestCustomCloudUserAPIContractRoles(t *testing.T) {
+ 	previous := model.Conf
++	previousDir, previousReadOnly := util.ConfDir, util.ReadOnly
++	util.ConfDir, util.ReadOnly = t.TempDir(), false
+ 	model.Conf = model.NewAppConf()
+-	t.Cleanup(func() { model.Conf = previous })
++	t.Cleanup(func() {
++		model.Conf = previous
++		util.ConfDir, util.ReadOnly = previousDir, previousReadOnly
++	})
+ 	for _, user := range []*conf.User{nil, {UserId: "owner", UserTokenExpireTime: "0"}} {
+ 		model.Conf.SetUser(user)
+-		for _, role := range []model.Role{model.RoleAdministrator, model.RoleReader, model.RoleEditor} {
++		for _, role := range []model.Role{model.RoleReader, model.RoleEditor, model.RoleAdministrator} {
+ 			recorder := httptest.NewRecorder()
+ 			context, _ := gin.CreateTestContext(recorder)
+ 			context.Set(model.RoleContextKey, role)
+@@ -36,12 +42,12 @@ func TestAPIContractSettingCloudUserCached(t *testing.T) {
+ 			if result.Code != 0 {
+ 				t.Fatalf("cached query failed: %s", recorder.Body.String())
+ 			}
+-			if role == model.RoleAdministrator && user != nil {
+-				if result.Data == nil || result.Data.UserID != user.UserId {
++			if role == model.RoleAdministrator {
++				if result.Data == nil || result.Data.UserID != "0" {
+ 					t.Fatal("cached account missing")
+ 				}
+-			} else if result.Data != nil {
+-				t.Fatal("unexpected account disclosure")
++			} else if result.Data != nil || model.Conf.GetUser() != user {
++				t.Fatal("non-admin query disclosed or changed the account")
+ 			}
+ 		}
+ 	}
+diff --git a/kernel/api/setting.go b/kernel/api/setting.go
+index b57f9b8..d43e72b 100644
+--- a/kernel/api/setting.go
++++ b/kernel/api/setting.go
+@@ -699,18 +699,7 @@ var getPublish = contractHandler(apicontract.GetPublish, func(c *gin.Context, re
+ })
+ 
+ var getCloudUser = contractHandler(apicontract.GetCloudUser, func(c *gin.Context, request apicontract.SettingCloudUserRequest) apicontract.Response[*apicontract.SettingUser] {
+-	user, err := model.GetCloudUser(request.Token, request.Cached)
+-	data := settingUserPayload(user)
+-	if err == nil {
+-		return apicontract.Success(data)
+-	}
+-	if model.IsInvalidUserRefresh(err) {
+-		return apicontract.GetCloudUser.FailureWithData(255, model.Conf.Language(19), nil)
+-	}
+-	if model.IsCloudAssetSourceChange(err) {
+-		return apicontract.GetCloudUser.FailureWithData(1, err.Error(), data)
+-	}
+-	return apicontract.GetCloudUser.FailureWithData(1, model.Conf.Language(18), data)
++	return apicontract.Success(settingUserPayload(model.GetCustomCloudUser()))
+ }, func(c *gin.Context) *apicontract.Response[*apicontract.SettingUser] {
+ 	if model.IsAdminRoleContext(c) {
+ 		return nil
+diff --git a/kernel/model/cloud_account_auth.go b/kernel/model/cloud_account_auth.go
+index 48ce468..bde4045 100644
+--- a/kernel/model/cloud_account_auth.go
++++ b/kernel/model/cloud_account_auth.go
+@@ -22,6 +22,10 @@ func cloudAccountAuthFailureHandler(token string) func() {
+ 	if requestedUser == nil {
+ 		return func() {}
+ 	}
++	// Official cloud services cannot revoke a local custom-build account.
++	if isCustomCloudUser(requestedUser) {
++		return func() {}
++	}
+ 	return func() {
+ 		cloudAccountMu.Lock()
+ 		defer cloudAccountMu.Unlock()
+diff --git a/kernel/model/cloud_service.go b/kernel/model/cloud_service.go
+index ac78720..d75eec6 100644
+--- a/kernel/model/cloud_service.go
++++ b/kernel/model/cloud_service.go
+@@ -391,6 +391,43 @@ func refreshAnnouncement() {
+ 	}
+ }
+ 
++func isCustomCloudUser(user *conf.User) bool {
++	return user != nil && user.UserId == "0" && user.UserName == "_" && user.UserToken == "token" &&
++		user.UserSiYuanProExpireTime == -1 && user.UserSiYuanOneTimePayStatus == 1
++}
++
++// GetCustomCloudUser preserves the local account-free entitlement of this custom build.
++// Reuse an existing local account without blocking cached reads during synchronization.
++func GetCustomCloudUser() *conf.User {
++	if user := Conf.GetUser(); isCustomCloudUser(user) {
++		return user
++	}
++	release := lockAssetSourceChange()
++	defer release()
++	cloudAccountMu.Lock()
++	defer cloudAccountMu.Unlock()
++
++	user := &conf.User{
++		UserId:                       "0",
++		UserName:                     "_",
++		UserAvatarURL:                "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
++		UserTitles:                   []*conf.UserTitle{},
++		UserCreateTime:               "29991231 00:00:00",
++		UserSiYuanProExpireTime:      -1,
++		UserToken:                    "token",
++		UserTokenExpireTime:          "32503593600",
++		UserSiYuanSubscriptionPlan:   0,
++		UserSiYuanSubscriptionStatus: 0,
++		UserSiYuanSubscriptionType:   1,
++		UserSiYuanOneTimePayStatus:   1,
++	}
++	Conf.SetUser(user)
++	data, _ := gulu.JSON.MarshalJSON(user)
++	Conf.UserData = util.AESEncrypt(string(data))
++	Conf.Save()
++	return user
++}
++
+ // GetCloudUser 在启动时读取内存账户；需要刷新时保留资源来源切换保护。
+ func GetCloudUser(token string, cached bool) (*conf.User, error) {
+ 	if cached {
+@@ -400,6 +437,10 @@ func GetCloudUser(token string, cached bool) (*conf.User, error) {
+ }
+ 
+ func RefreshUser(token string) (ret *conf.User, err error) {
++	// A local custom-build account has no official cloud token to refresh.
++	if user := Conf.GetUser(); isCustomCloudUser(user) && (token == "" || token == user.UserToken) {
++		return user, nil
++	}
+ 	release := lockAssetSourceChange()
+ 	defer release()
+ 	previousUserID := ""
+diff --git a/kernel/model/custom_cloud_user_test.go b/kernel/model/custom_cloud_user_test.go
+new file mode 100644
+index 0000000..592980e
+--- /dev/null
++++ b/kernel/model/custom_cloud_user_test.go
+@@ -0,0 +1,115 @@
++package model
++
++import (
++	"bytes"
++	"encoding/json"
++	"net/http"
++	"os"
++	"path/filepath"
++	"reflect"
++	"testing"
++	"time"
++
++	"github.com/siyuan-note/siyuan/kernel/conf"
++	"github.com/siyuan-note/siyuan/kernel/util"
++)
++
++func setupCustomCloudUserTest(t *testing.T) {
++	t.Helper()
++	setupCloudAccountAuthTest(t)
++	Conf.Sync.Load().Provider = conf.ProviderS3
++	Conf.Sync.Load().Enabled = false
++	Conf.SetUser(nil)
++	Conf.UserData = ""
++	Conf.Save()
++}
++
++func TestCustomCloudUserPersistsAcrossReload(t *testing.T) {
++	setupCustomCloudUserTest(t)
++	user := GetCustomCloudUser()
++	if user == nil || user.UserSiYuanProExpireTime != -1 || user.UserSiYuanOneTimePayStatus != 1 {
++		t.Fatal("local account did not grant the existing custom-build features")
++	}
++	data, err := os.ReadFile(filepath.Join(util.ConfDir, "conf.json"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if bytes.Contains(data, []byte(`"userToken"`)) {
++		t.Fatal("account fields were persisted without encryption")
++	}
++	restored := NewAppConf()
++	if err = json.Unmarshal(data, restored); err != nil {
++		t.Fatal(err)
++	}
++	Conf = restored
++	reloaded := loadUserFromConf()
++	if !reflect.DeepEqual(user, reloaded) {
++		t.Fatal("persisted local account could not be restored")
++	}
++	Conf.SetUser(reloaded)
++	if GetCustomCloudUser() != reloaded || Conf.Sync.Load().Provider != conf.ProviderS3 ||
++		Conf.Sync.Load().Enabled || string(Conf.Repo.Load().Key) != "0123456789abcdef0123456789abcdef" {
++		t.Fatal("restoring the account changed sync settings or the repository encryption key")
++	}
++}
++
++func TestCustomCloudUserCachedDuringSync(t *testing.T) {
++	setupCustomCloudUserTest(t)
++	user := GetCustomCloudUser()
++	persisted := Conf.UserData
++	release := lockAssetSourceChange()
++	defer release()
++	done := make(chan *conf.User, 1)
++	go func() { done <- GetCustomCloudUser() }()
++	select {
++	case got := <-done:
++		if got != user || Conf.UserData != persisted {
++			t.Fatal("cached read replaced or rewrote the local account")
++		}
++	case <-time.After(3 * time.Second):
++		release()
++		<-done
++		t.Fatal("cached local account query waited for synchronization")
++	}
++}
++
++func TestCustomCloudUserRefreshKeepsLocalAccount(t *testing.T) {
++	setupCustomCloudUserTest(t)
++	user := GetCustomCloudUser()
++	persisted := Conf.UserData
++	previousReminded := subscriptionExpirationReminded
++	t.Cleanup(func() { subscriptionExpirationReminded = previousReminded })
++	called := false
++	mockCloudAuthResponse(t, func(request *http.Request) (*http.Response, error) {
++		called = true
++		return cloudAuthResponse(request, http.StatusUnauthorized, ""), nil
++	})
++	for _, token := range []string{"", user.UserToken} {
++		got, err := RefreshUser(token)
++		if err != nil || got != user {
++			t.Fatal("refresh revoked the local account")
++		}
++	}
++	refreshUser()
++	if called || Conf.GetUser() != user || Conf.UserData != persisted {
++		t.Fatal("background refresh contacted the official cloud or changed the local account")
++	}
++}
++
++func TestCustomCloudAccountSurvivesAuthFailure(t *testing.T) {
++	setupCustomCloudUserTest(t)
++	user := GetCustomCloudUser()
++	persisted := Conf.UserData
++	called := false
++	mockCloudAuthResponse(t, func(request *http.Request) (*http.Response, error) {
++		called = true
++		return cloudAuthResponse(request, http.StatusUnauthorized, `{"code":-1,"msg":"rejected"}`), nil
++	})
++	if _, err := GetCloudShorthands(1); err == nil || !called {
++		t.Fatal("official cloud request did not return its authentication failure")
++	}
++	if Conf.GetUser() != user || Conf.UserData != persisted || Conf.Sync.Load().Provider != conf.ProviderS3 ||
++		Conf.GetUser().UserSiYuanOneTimePayStatus != 1 {
++		t.Fatal("official cloud authentication failure revoked local features or changed third-party sync")
++	}
++}
